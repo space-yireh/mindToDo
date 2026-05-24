@@ -12,7 +12,7 @@ export type MindNodeData = {
   isEditing?: boolean
 }
 
-export type MindNode = Node<MindNodeData, 'mindNode'>
+export type MindNode = Node<MindNodeData, 'mindNode'> & { selected: boolean }
 
 export type MindEdge = Edge
 

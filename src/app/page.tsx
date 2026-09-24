@@ -45,7 +45,7 @@ export default function Home() {
   const [mindMap, setMindMap] = useState<MindMap | null>(null);
   const [originalTitle, setOriginalTitle] = useState<string>("");
   const [selection, setSelection] = useState<Selection>(null);
-  const [showCompleted, setShowCompleted] = useState(true);
+  const [showCompleted, setShowCompleted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);

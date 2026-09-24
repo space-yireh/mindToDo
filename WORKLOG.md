@@ -71,6 +71,7 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
 6. **Light theme + responsive panels** — full light theme (indigo-600
    accent), Sidebar/PropertiesPanel collapse to width 0 on desktop and
    become slide-in overlay drawers with a backdrop under `md` (768px).
+7. **Zoom control & fitView bounds** (Branch: `feat/zoom-controls-and-fitview`) — bounded `fitView` with `maxZoom: 1.0` (prevents huge nodes when few tasks exist) and `minZoom: 0.35` (prevents tiny unreadable nodes when many tasks exist). Added floating `ZoomControls` overlay panel (`-`, `100%` reset, `+`, `Fit`), `Cmd/Ctrl + +/-/0` keyboard shortcuts, smooth auto-centering on active node selection, default `showCompleted` set to `false`, and automatic `fitView` re-calculation on toggling completed tasks.
 
 ## Current keyboard shortcuts (canvas focused, a node selected)
 

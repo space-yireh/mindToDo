@@ -1,7 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Background, BackgroundVariant, ReactFlow, ReactFlowProvider } from "@xyflow/react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  Background,
+  BackgroundVariant,
+  Panel,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  useViewport,
+} from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { mindMapNodeTypes } from "@/components/mindmap/MindMapNodeBox";
 import {
@@ -60,10 +68,75 @@ const IGNORED_TYPE_TO_EDIT_KEYS = new Set([
   "ContextMenu",
 ]);
 
+function ZoomControls() {
+  const { zoomIn, zoomOut, zoomTo, fitView } = useReactFlow();
+  const { zoom } = useViewport();
+
+  const percentage = Math.round(zoom * 100);
+
+  return (
+    <Panel
+      position="bottom-right"
+      className="m-3 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur-sm select-none"
+    >
+      <button
+        type="button"
+        onClick={() => zoomOut({ duration: 200 })}
+        className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 transition-colors"
+        title="Zoom Out (Ctrl -)"
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+        </svg>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => zoomTo(1, { duration: 200 })}
+        className="h-7 min-w-[48px] px-1.5 text-center text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded transition-colors"
+        title="Reset Zoom to 100%"
+      >
+        {percentage}%
+      </button>
+
+      <button
+        type="button"
+        onClick={() => zoomIn({ duration: 200 })}
+        className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 transition-colors"
+        title="Zoom In (Ctrl +)"
+      >
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+        </svg>
+      </button>
+
+      <div className="h-4 w-[1px] bg-slate-200 mx-0.5" />
+
+      <button
+        type="button"
+        onClick={() => fitView({ maxZoom: 1.0, duration: 300 })}
+        className="flex h-7 items-center gap-1 rounded px-2 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 transition-colors"
+        title="Fit View (Ctrl 0)"
+      >
+        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+          />
+        </svg>
+        Fit
+      </button>
+    </Panel>
+  );
+}
+
 function MindMapCanvasInner(props: MindMapCanvasProps) {
   const { mindMap, selection, showCompleted } = props;
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editingSeed, setEditingSeed] = useState<string | null>(null);
+
+  const { zoomIn, zoomOut, fitView, setCenter } = useReactFlow();
 
   function startEdit(nodeId: string, seed: string | null = null) {
     setEditingSeed(seed);
@@ -75,9 +148,6 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
     setEditingSeed(null);
   }
 
-  // adding a node always drops straight into editing it (select-all on the
-  // default title) so keyboard flow never breaks stride: Tab/Enter/+ all
-  // land you ready to type the new node's name immediately
   function handleAddTaskNode(): string {
     const newId = props.onAddTaskNode();
     startEdit(newId);
@@ -121,7 +191,46 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
     [mindMap, selection, showCompleted, editingNodeId, editingSeed],
   );
 
+  // Smoothly center on selected node when selection changes
+  useEffect(() => {
+    if (!selection) return;
+    const targetId = selection.depth === 0 ? MINDMAP_ROOT_ID : selection.nodeId;
+    const targetNode = nodes.find((n) => n.id === targetId);
+    if (targetNode && targetNode.width && targetNode.height) {
+      const centerX = targetNode.position.x + targetNode.width / 2;
+      const centerY = targetNode.position.y + targetNode.height / 2;
+      setCenter(centerX, centerY, { duration: 300 });
+    }
+  }, [selection, nodes, setCenter]);
+
+  // Re-fit view when showCompleted changes so layout zoom is optimized for current node count
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fitView({ maxZoom: 1.0, duration: 300 });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [showCompleted, fitView]);
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    // Zoom keyboard shortcuts
+    if (e.ctrlKey || e.metaKey) {
+      if (e.key === "=" || e.key === "+") {
+        e.preventDefault();
+        zoomIn({ duration: 200 });
+        return;
+      }
+      if (e.key === "-") {
+        e.preventDefault();
+        zoomOut({ duration: 200 });
+        return;
+      }
+      if (e.key === "0") {
+        e.preventDefault();
+        fitView({ maxZoom: 1.0, duration: 300 });
+        return;
+      }
+    }
+
     // while a node is being edited inline, its own input owns the keyboard
     if (editingNodeId || !selection) return;
 
@@ -147,10 +256,6 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
       }
       case "F2":
       case "Escape": {
-        // Escape doubles as "enter edit mode" (F2's often-awkward-to-reach
-        // alternative). It also sidesteps the IME first-jamo-loss issue
-        // with typing directly: Escape isn't a composable character, so
-        // the button->input focus handoff never races an IME composition.
         e.preventDefault();
         startEdit(selection.depth === 0 ? MINDMAP_ROOT_ID : selection.nodeId);
         break;
@@ -168,11 +273,6 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
         break;
       }
       default: {
-        // typing directly on a selected node jumps straight into editing it,
-        // replacing the old title with what was just typed — mirrors how a
-        // plain click + typing works in most mind-map tools. Falls through
-        // for IME composition starts too (Korean etc. report a non-empty,
-        // non-modifier key here even before the syllable is fully composed).
         if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) break;
         if (IGNORED_TYPE_TO_EDIT_KEYS.has(e.key)) break;
         const isPrintable = e.key.length === 1;
@@ -187,7 +287,7 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
   }
 
   return (
-    <div className="flex-1 bg-slate-50 outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
+    <div className="flex-1 bg-slate-50 outline-none relative" tabIndex={0} onKeyDown={handleKeyDown}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -197,11 +297,14 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
         deleteKeyCode={null}
         zoomOnDoubleClick={false}
         panOnScroll
+        minZoom={0.15}
+        maxZoom={2.0}
         fitView
-        fitViewOptions={{ padding: 0.3 }}
+        fitViewOptions={{ padding: 0.3, maxZoom: 1.0, minZoom: 0.35 }}
         proOptions={{ hideAttribution: false }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#CBD5E1" />
+        <ZoomControls />
       </ReactFlow>
     </div>
   );

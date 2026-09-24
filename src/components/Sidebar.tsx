@@ -26,7 +26,7 @@ export function Sidebar({
   return (
     <aside
       className={[
-        "flex flex-col border-r border-slate-200 bg-white transition-all duration-200 ease-in-out",
+        "flex flex-col border-r border-slate-200 bg-white transition-all duration-200 ease-in-out dark:border-slate-800 dark:bg-slate-900",
         "fixed inset-y-0 left-0 z-40 md:static md:inset-auto",
         open
           ? "w-64 translate-x-0"
@@ -45,7 +45,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 md:hidden"
+          className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 md:hidden"
           aria-label="목록 닫기"
         >
           ✕
@@ -53,7 +53,7 @@ export function Sidebar({
       </div>
       <nav className="flex-1 overflow-y-auto px-2 pb-3">
         {taskLists.length === 0 && (
-          <p className="px-2 py-4 text-center text-xs text-slate-400">목록이 없습니다.</p>
+          <p className="px-2 py-4 text-center text-xs text-slate-400 dark:text-slate-500">목록이 없습니다.</p>
         )}
         <ul className="flex flex-col gap-1">
           {taskLists.map((list) => (
@@ -64,8 +64,8 @@ export function Sidebar({
                 disabled={busy}
                 className={`flex-1 truncate rounded-md px-2 py-1.5 text-left text-sm disabled:cursor-not-allowed ${
                   list.id === selectedTaskListId
-                    ? "bg-indigo-50 font-medium text-indigo-700"
-                    : "text-slate-600 hover:bg-slate-100"
+                    ? "bg-indigo-50 font-medium text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300"
+                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800/80"
                 }`}
                 title={list.title}
               >
@@ -75,7 +75,7 @@ export function Sidebar({
                 type="button"
                 onClick={() => onDelete(list.id)}
                 disabled={busy}
-                className="shrink-0 rounded-md px-2 py-1.5 text-xs text-slate-400 opacity-0 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed group-hover:opacity-100"
+                className="shrink-0 rounded-md px-2 py-1.5 text-xs text-slate-400 opacity-0 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-400 disabled:cursor-not-allowed group-hover:opacity-100"
                 aria-label="목록 삭제"
               >
                 삭제

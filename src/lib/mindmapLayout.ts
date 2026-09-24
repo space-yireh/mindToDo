@@ -203,7 +203,7 @@ export function computeMindMapLayout(options: ComputeLayoutOptions): {
         source: d.parent.data.id,
         target: d.data.id,
         type: "default",
-        style: { stroke: "#CBD5E1", strokeWidth: 1.5 },
+        style: { stroke: "var(--edge-stroke, #CBD5E1)", strokeWidth: 1.5 },
       });
     }
   });

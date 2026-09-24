@@ -72,6 +72,7 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
    accent), Sidebar/PropertiesPanel collapse to width 0 on desktop and
    become slide-in overlay drawers with a backdrop under `md` (768px).
 7. **Zoom control & fitView bounds** (Branch: `feat/zoom-controls-and-fitview`) — bounded `fitView` with `maxZoom: 1.0` (prevents huge nodes when few tasks exist) and `minZoom: 0.35` (prevents tiny unreadable nodes when many tasks exist). Added floating `ZoomControls` overlay panel (`-`, `100%` reset, `+`, `Fit`), `Cmd/Ctrl + +/-/0` keyboard shortcuts, smooth auto-centering on active node selection, default `showCompleted` set to `false`, and automatic `fitView` re-calculation on toggling completed tasks.
+8. **Theme system (Light / Dark / System)** (Branch: `feat/theme-system`) — implemented `ThemeProvider` with `useTheme` hook supporting 3 modes (`light`, `dark`, `system`), persistent `localStorage` storage, OS `prefers-color-scheme` auto-switching, dark mode CSS variables for React Flow edges & grid background dots, theme toggle segment control in toolbar, and dark theme styling across all UI panels, nodes, and modals.
 
 ## Current keyboard shortcuts (canvas focused, a node selected)
 

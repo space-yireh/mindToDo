@@ -3,6 +3,15 @@
 :root {
   --background: #ffffff;
   --foreground: #0f172a;
+  --edge-stroke: #CBD5E1;
+  --bg-dots: #CBD5E1;
+}
+
+html.dark {
+  --background: #020617;
+  --foreground: #f8fafc;
+  --edge-stroke: #475569;
+  --bg-dots: #334155;
 }
 
 @theme inline {
@@ -17,3 +26,4 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+

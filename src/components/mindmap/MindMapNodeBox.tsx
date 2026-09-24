@@ -6,12 +6,12 @@ import type { MindMapNode, MindMapNodeKind } from "@/lib/mindmapLayout";
 import { NODE_SIZE } from "@/lib/mindmapLayout";
 
 const KIND_STYLES: Record<MindMapNodeKind, string> = {
-  root: "bg-indigo-600 text-white text-base font-semibold border-indigo-600 shadow-indigo-200",
-  task: "bg-white text-slate-700 text-sm font-medium border-slate-200 shadow-slate-200/60",
-  leaf: "bg-slate-50 text-slate-500 text-xs border-slate-200 !shadow-none",
+  root: "bg-indigo-600 text-white text-base font-semibold border-indigo-600 shadow-indigo-200 dark:shadow-none",
+  task: "bg-white text-slate-700 text-sm font-medium border-slate-200 shadow-slate-200/60 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700 dark:shadow-none",
+  leaf: "bg-slate-50 text-slate-500 text-xs border-slate-200 !shadow-none dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700/60",
 };
 
-const SELECTED_RING = "ring-2 ring-offset-2 ring-offset-slate-50 ring-amber-400";
+const SELECTED_RING = "ring-2 ring-offset-2 ring-offset-slate-50 ring-amber-400 dark:ring-offset-slate-900";
 
 function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
   const {
@@ -42,16 +42,11 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
   useEffect(() => {
     if (!editing) return;
     resolvedRef.current = false;
-    // nodes declare explicit width/height so React Flow skips its
-    // ResizeObserver auto-measure pass; without that, this focus call
-    // could race the measure-driven reflow and silently fail
     const raf = requestAnimationFrame(() => {
       const el = inputRef.current;
       if (!el) return;
       el.focus();
       if (editingSeed) {
-        // started by typing directly on a selected node: replace with what
-        // was typed instead of the old title, cursor after it
         el.value = editingSeed;
         el.setSelectionRange(el.value.length, el.value.length);
       } else {
@@ -62,11 +57,6 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
   }, [editing, editingSeed]);
 
   useEffect(() => {
-    // Safari/WebKit don't always give a <button> real DOM focus on a plain
-    // mouse click, which silently breaks every keyboard shortcut afterwards
-    // (they all rely on the focused node's ancestor receiving keydown). Make
-    // focus follow "selected" explicitly instead of relying on native click
-    // focus, so this stays reliable across browsers and after keyboard nav.
     if (selected && !editing) {
       buttonRef.current?.focus();
     }
@@ -74,11 +64,6 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     e.stopPropagation();
-    // Korean (and other IME) composition: the Enter that finalizes the
-    // current syllable arrives as its own keydown with isComposing=true,
-    // immediately followed by a second, real Enter keydown. Only the
-    // second one should commit — otherwise the first one closes editing
-    // and the second leaks through to the canvas as "add sibling".
     if (e.nativeEvent.isComposing) return;
     if (e.key === "Enter") {
       e.preventDefault();
@@ -102,8 +87,8 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
       style={{ width: size.width, height: size.height }}
       className="group relative flex items-center justify-center"
     >
-      {kind !== "root" && <Handle type="target" position={targetPosition} className="!bg-slate-300" />}
-      {kind !== "leaf" && <Handle type="source" position={sourcePosition} className="!bg-slate-300" />}
+      {kind !== "root" && <Handle type="target" position={targetPosition} className="!bg-slate-300 dark:!bg-slate-600" />}
+      {kind !== "leaf" && <Handle type="source" position={sourcePosition} className="!bg-slate-300 dark:!bg-slate-600" />}
 
       {editing ? (
         <div

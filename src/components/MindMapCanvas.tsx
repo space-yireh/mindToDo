@@ -77,12 +77,12 @@ function ZoomControls() {
   return (
     <Panel
       position="bottom-right"
-      className="m-3 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur-sm select-none"
+      className="m-3 flex items-center gap-1 rounded-lg border border-slate-200 bg-white/90 p-1 shadow-sm backdrop-blur-sm select-none dark:border-slate-800 dark:bg-slate-900/90"
     >
       <button
         type="button"
         onClick={() => zoomOut({ duration: 200 })}
-        className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 transition-colors"
+        className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-colors"
         title="Zoom Out (Ctrl -)"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -93,7 +93,7 @@ function ZoomControls() {
       <button
         type="button"
         onClick={() => zoomTo(1, { duration: 200 })}
-        className="h-7 min-w-[48px] px-1.5 text-center text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded transition-colors"
+        className="h-7 min-w-[48px] px-1.5 text-center text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 rounded transition-colors"
         title="Reset Zoom to 100%"
       >
         {percentage}%
@@ -102,7 +102,7 @@ function ZoomControls() {
       <button
         type="button"
         onClick={() => zoomIn({ duration: 200 })}
-        className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 transition-colors"
+        className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-colors"
         title="Zoom In (Ctrl +)"
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -110,12 +110,12 @@ function ZoomControls() {
         </svg>
       </button>
 
-      <div className="h-4 w-[1px] bg-slate-200 mx-0.5" />
+      <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-800 mx-0.5" />
 
       <button
         type="button"
         onClick={() => fitView({ maxZoom: 1.0, duration: 300 })}
-        className="flex h-7 items-center gap-1 rounded px-2 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 transition-colors"
+        className="flex h-7 items-center gap-1 rounded px-2 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-colors"
         title="Fit View (Ctrl 0)"
       >
         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -287,7 +287,7 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
   }
 
   return (
-    <div className="flex-1 bg-slate-50 outline-none relative" tabIndex={0} onKeyDown={handleKeyDown}>
+    <div className="flex-1 bg-slate-50 dark:bg-slate-950 outline-none relative" tabIndex={0} onKeyDown={handleKeyDown}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -303,7 +303,7 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
         fitViewOptions={{ padding: 0.3, maxZoom: 1.0, minZoom: 0.35 }}
         proOptions={{ hideAttribution: false }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#CBD5E1" />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--bg-dots, #CBD5E1)" />
         <ZoomControls />
       </ReactFlow>
     </div>

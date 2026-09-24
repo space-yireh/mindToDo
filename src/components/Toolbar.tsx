@@ -1,5 +1,7 @@
 "use client";
 
+import { useTheme } from "@/components/ThemeProvider";
+
 interface ToolbarProps {
   onImportClick: () => void;
   onExportClick: () => void;
@@ -25,6 +27,54 @@ export function PanelIcon({ side }: { side: "left" | "right" }) {
   );
 }
 
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <div className="flex items-center rounded-lg border border-slate-200 bg-slate-100/70 p-0.5 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400 select-none">
+      <button
+        type="button"
+        onClick={() => setTheme("light")}
+        className={`flex items-center gap-1 rounded-md px-2 py-1 transition-colors ${
+          theme === "light"
+            ? "bg-white font-medium text-slate-900 shadow-xs dark:bg-slate-800 dark:text-slate-100"
+            : "hover:text-slate-900 dark:hover:text-slate-200"
+        }`}
+        title="라이트 모드"
+      >
+        <span>☀️</span>
+        <span className="hidden sm:inline">라이트</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setTheme("dark")}
+        className={`flex items-center gap-1 rounded-md px-2 py-1 transition-colors ${
+          theme === "dark"
+            ? "bg-white font-medium text-slate-900 shadow-xs dark:bg-slate-800 dark:text-slate-100"
+            : "hover:text-slate-900 dark:hover:text-slate-200"
+        }`}
+        title="다크 모드"
+      >
+        <span>🌙</span>
+        <span className="hidden sm:inline">다크</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => setTheme("system")}
+        className={`flex items-center gap-1 rounded-md px-2 py-1 transition-colors ${
+          theme === "system"
+            ? "bg-white font-medium text-slate-900 shadow-xs dark:bg-slate-800 dark:text-slate-100"
+            : "hover:text-slate-900 dark:hover:text-slate-200"
+        }`}
+        title="OS 시스템 설정"
+      >
+        <span>💻</span>
+        <span className="hidden sm:inline">시스템</span>
+      </button>
+    </div>
+  );
+}
+
 export function Toolbar({
   onImportClick,
   onExportClick,
@@ -37,7 +87,7 @@ export function Toolbar({
   onToggleProperties,
 }: ToolbarProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-3">
+    <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950">
       <button
         type="button"
         onClick={onToggleSidebar}
@@ -45,7 +95,9 @@ export function Toolbar({
         aria-label="목록 패널 토글"
         title="목록 패널 토글"
         className={`rounded-md p-1.5 ${
-          sidebarOpen ? "bg-slate-100 text-slate-700" : "text-slate-400 hover:bg-slate-100"
+          sidebarOpen
+            ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            : "text-slate-400 hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-900 dark:hover:text-slate-300"
         }`}
       >
         <PanelIcon side="left" />
@@ -56,7 +108,7 @@ export function Toolbar({
           type="button"
           onClick={onImportClick}
           disabled={disabled}
-          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-900"
         >
           가져오기
         </button>
@@ -68,29 +120,36 @@ export function Toolbar({
         >
           내보내기
         </button>
-        <label className="ml-2 flex select-none items-center gap-2 text-sm text-slate-600">
+        <label className="ml-2 flex select-none items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
           <input
             type="checkbox"
             checked={showCompleted}
             onChange={onToggleShowCompleted}
-            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400"
+            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-900"
           />
           완료된 할일 보기
         </label>
       </div>
 
-      <button
-        type="button"
-        onClick={onToggleProperties}
-        aria-pressed={propertiesOpen}
-        aria-label="속성 패널 토글"
-        title="속성 패널 토글"
-        className={`ml-auto rounded-md p-1.5 ${
-          propertiesOpen ? "bg-slate-100 text-slate-700" : "text-slate-400 hover:bg-slate-100"
-        }`}
-      >
-        <PanelIcon side="right" />
-      </button>
+      <div className="ml-auto flex items-center gap-2">
+        <ThemeToggle />
+
+        <button
+          type="button"
+          onClick={onToggleProperties}
+          aria-pressed={propertiesOpen}
+          aria-label="속성 패널 토글"
+          title="속성 패널 토글"
+          className={`rounded-md p-1.5 ${
+            propertiesOpen
+              ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              : "text-slate-400 hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-900 dark:hover:text-slate-300"
+          }`}
+        >
+          <PanelIcon side="right" />
+        </button>
+      </div>
     </div>
   );
 }
+

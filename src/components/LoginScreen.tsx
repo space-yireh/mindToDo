@@ -28,7 +28,7 @@ export function LoginScreen({ isReady, hasClientId, expired, authError, onSignIn
         type="button"
         onClick={onSignIn}
         disabled={!isReady}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+        className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {isReady ? "Google 계정으로 로그인" : "로그인 준비 중…"}
       </button>

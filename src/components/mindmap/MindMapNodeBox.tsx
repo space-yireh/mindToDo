@@ -6,12 +6,12 @@ import type { MindMapNode, MindMapNodeKind } from "@/lib/mindmapLayout";
 import { NODE_SIZE } from "@/lib/mindmapLayout";
 
 const KIND_STYLES: Record<MindMapNodeKind, string> = {
-  root: "bg-indigo-700 text-white text-base font-semibold border-indigo-400",
-  task: "bg-slate-600 text-white text-sm font-medium border-slate-400",
-  leaf: "bg-slate-700/60 text-slate-100 text-xs border-slate-500",
+  root: "bg-indigo-600 text-white text-base font-semibold border-indigo-600 shadow-indigo-200",
+  task: "bg-white text-slate-700 text-sm font-medium border-slate-200 shadow-slate-200/60",
+  leaf: "bg-slate-50 text-slate-500 text-xs border-slate-200 !shadow-none",
 };
 
-const SELECTED_RING = "ring-2 ring-offset-2 ring-offset-slate-900 ring-amber-400";
+const SELECTED_RING = "ring-2 ring-offset-2 ring-offset-slate-50 ring-amber-400";
 
 function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
   const {
@@ -102,8 +102,8 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
       style={{ width: size.width, height: size.height }}
       className="group relative flex items-center justify-center"
     >
-      {kind !== "root" && <Handle type="target" position={targetPosition} className="!bg-slate-400" />}
-      {kind !== "leaf" && <Handle type="source" position={sourcePosition} className="!bg-slate-400" />}
+      {kind !== "root" && <Handle type="target" position={targetPosition} className="!bg-slate-300" />}
+      {kind !== "leaf" && <Handle type="source" position={sourcePosition} className="!bg-slate-300" />}
 
       {editing ? (
         <div

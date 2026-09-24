@@ -187,7 +187,7 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
   }
 
   return (
-    <div className="flex-1 bg-slate-900 outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
+    <div className="flex-1 bg-slate-50 outline-none" tabIndex={0} onKeyDown={handleKeyDown}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -201,7 +201,7 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
         fitViewOptions={{ padding: 0.3 }}
         proOptions={{ hideAttribution: false }}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#CBD5E1" />
       </ReactFlow>
     </div>
   );

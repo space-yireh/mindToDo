@@ -6,7 +6,7 @@ import { MindMapCanvas } from "@/components/MindMapCanvas";
 import { LoginScreen } from "@/components/LoginScreen";
 import { PropertiesPanel } from "@/components/PropertiesPanel";
 import { Sidebar } from "@/components/Sidebar";
-import { Toolbar } from "@/components/Toolbar";
+import { PanelIcon, Toolbar } from "@/components/Toolbar";
 import { useToast } from "@/components/ToastProvider";
 import {
   GoogleTasksApiError,
@@ -48,6 +48,20 @@ export default function Home() {
   const [showCompleted, setShowCompleted] = useState(true);
   const [busy, setBusy] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [propertiesOpen, setPropertiesOpen] = useState(true);
+
+  // start collapsed on narrow screens; SSR/first paint assumes desktop
+  // (both open) since window isn't available until after mount
+  useEffect(() => {
+    function applyMobileDefaults() {
+      if (window.matchMedia("(max-width: 767px)").matches) {
+        setSidebarOpen(false);
+        setPropertiesOpen(false);
+      }
+    }
+    applyMobileDefaults();
+  }, []);
 
   const wasSignedInRef = useRef(false);
 
@@ -366,8 +380,19 @@ export default function Home() {
     );
   }
 
+  const anyPanelOpenOnMobile = sidebarOpen || propertiesOpen;
+
   return (
-    <div className="flex flex-1 overflow-hidden">
+    <div className="relative flex flex-1 overflow-hidden">
+      {anyPanelOpenOnMobile && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/30 md:hidden"
+          onClick={() => {
+            setSidebarOpen(false);
+            setPropertiesOpen(false);
+          }}
+        />
+      )}
       <Sidebar
         taskLists={taskLists}
         selectedTaskListId={selectedTaskListId}
@@ -375,6 +400,8 @@ export default function Home() {
         onCreate={handleCreateTaskList}
         onDelete={handleDeleteTaskList}
         busy={busy}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       {mindMap ? (
@@ -385,6 +412,10 @@ export default function Home() {
             showCompleted={showCompleted}
             onToggleShowCompleted={() => setShowCompleted((v) => !v)}
             disabled={busy}
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            propertiesOpen={propertiesOpen}
+            onToggleProperties={() => setPropertiesOpen((v) => !v)}
           />
           <div className="flex flex-1 overflow-hidden">
             <MindMapCanvas
@@ -431,6 +462,8 @@ export default function Home() {
               onRootTitleChange={handleRootTitleChange}
               selectedNode={selectedNode}
               onTitleChange={handleSelectedTitleChange}
+              open={propertiesOpen}
+              onClose={() => setPropertiesOpen(false)}
               onNotesChange={(notes) => {
                 if (!mindMap || !selection || selection.depth === 0) return;
                 const next =
@@ -460,8 +493,20 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
-          왼쪽에서 목록을 선택하거나 새로 만들어주세요.
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex items-center border-b border-slate-200 bg-white px-3 py-3 md:hidden">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen((v) => !v)}
+              aria-label="목록 패널 토글"
+              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100"
+            >
+              <PanelIcon side="left" />
+            </button>
+          </div>
+          <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
+            왼쪽에서 목록을 선택하거나 새로 만들어주세요.
+          </div>
         </div>
       )}
 

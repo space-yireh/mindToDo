@@ -18,12 +18,23 @@ const LanguageContext = createContext<LanguageContextType>({
 const STORAGE_KEY = "mindtodo_language";
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
-  const [language, setLanguageState] = useState<Language>(() => {
-    if (typeof window === "undefined") return "ko";
+  // Always start at "ko" so the server render and the client's first paint
+  // match exactly — reading localStorage here (even gated on `typeof
+  // window`) let the client's *first* render differ from the server's,
+  // which is a hydration mismatch on every piece of text `t` touches, not
+  // just a cosmetic one. The saved language is applied afterward, in an
+  // effect that only ever runs client-side post-hydration.
+  const [language, setLanguageState] = useState<Language>("ko");
+
+  useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY) as Language | null;
-    if (saved === "ko" || saved === "en") return saved;
-    return "ko";
-  });
+    if (saved === "ko" || saved === "en") {
+      // deliberately diverging from the SSR-safe initial state above —
+      // this is the sync-from-localStorage-after-mount step the fix depends on
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLanguageState(saved);
+    }
+  }, []);
 
   useEffect(() => {
     document.documentElement.lang = language;

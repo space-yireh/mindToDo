@@ -85,7 +85,13 @@ export function useGoogleAuth() {
       client_id: clientId,
       scope: SCOPE,
       callback: (response: TokenResponse) => {
-        if (response.error || !response.access_token) {
+        if (response.error) {
+          // GIS reports an `error` field when the user closes the popup or
+          // denies consent — treat this as cancellation, not a technical failure
+          setAuthError(t.loginCancelled);
+          return;
+        }
+        if (!response.access_token) {
           setAuthError(t.loginFailed);
           return;
         }

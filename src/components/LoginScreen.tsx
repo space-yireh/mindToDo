@@ -1,6 +1,7 @@
 "use client";
 
 import { useLanguage } from "@/components/LanguageProvider";
+import { LegalFooter } from "@/components/LegalFooter";
 
 interface LoginScreenProps {
   isReady: boolean;
@@ -31,6 +32,7 @@ export function LoginScreen({ isReady, hasClientId, expired, authError, onSignIn
       >
         {isReady ? t.signIn : t.signInPreparing}
       </button>
+      <LegalFooter className="mt-6" />
     </div>
   );
 }

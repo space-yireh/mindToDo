@@ -55,14 +55,17 @@ export default function Home() {
   const [propertiesOpen, setPropertiesOpen] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
-  // start collapsed on narrow screens; SSR/first paint assumes desktop
-  // (both open) since window isn't available until after mount
+  // On narrow screens the list should be the first thing shown after
+  // login, full-screen, so a first-time user can immediately tap a list
+  // and start working — sidebarOpen already defaults to true, so only
+  // propertiesOpen (nothing selected yet) needs to be forced closed here.
+  // SSR/first paint assumes desktop (both open) since window isn't
+  // available until after mount.
   useEffect(() => {
     function applyMobileDefaults() {
       const mobile = window.matchMedia("(max-width: 767px)").matches;
       setIsMobile(mobile);
       if (mobile) {
-        setSidebarOpen(false);
         setPropertiesOpen(false);
       }
     }
@@ -173,6 +176,16 @@ export default function Home() {
         showToast(t.toastSessionExpired, "error");
         return;
       }
+      // rate limits, server errors, and raw network failures (fetch() throws
+      // a plain TypeError, not GoogleTasksApiError) are transient — show a
+      // generic retry message instead of a raw/confusing error string
+      const isTransient =
+        (err instanceof GoogleTasksApiError && (err.status === 429 || err.status >= 500)) ||
+        (!(err instanceof GoogleTasksApiError) && err instanceof TypeError);
+      if (isTransient) {
+        showToast(t.toastTransientError, "error");
+        return;
+      }
       const message = err instanceof Error ? err.message : fallbackMessage;
       showToast(`${fallbackMessage}: ${message}`, "error");
     },
@@ -216,7 +229,7 @@ export default function Home() {
 
   const doImport = useCallback(
     async (taskListId: string, taskListTitle: string) => {
-      if (!auth.accessToken) return;
+      if (!auth.accessToken || busy) return;
       setBusy(true);
       setBusyLabel(t.importing);
       try {
@@ -224,7 +237,10 @@ export default function Home() {
         setMindMap(imported);
         setOriginalTitle(imported.title);
         setSelectedTaskListId(taskListId);
-        setSelection(null);
+        // auto-select root when the list is empty so its "+" add button is
+        // reliably reachable on mobile (no hover there, and nothing would
+        // otherwise be selected for a first-time user's brand-new list)
+        setSelection(imported.nodes.length === 0 ? { depth: 0 } : null);
         resetHistory();
         showToast(t.toastImportSuccess, "success");
       } catch (err) {
@@ -234,7 +250,7 @@ export default function Home() {
         setBusyLabel(undefined);
       }
     },
-    [auth.accessToken, handleApiError, showToast, resetHistory, t],
+    [auth.accessToken, busy, handleApiError, showToast, resetHistory, t],
   );
 
   const handleSelectTaskList = useCallback(
@@ -255,7 +271,9 @@ export default function Home() {
       setSelectedTaskListId(created.id);
       setMindMap(emptyMindMap(created.id, created.title));
       setOriginalTitle(created.title);
-      setSelection(null);
+      // a freshly created list always has 0 nodes — select root so its "+"
+      // button is reachable right away (see doImport for the same reasoning)
+      setSelection({ depth: 0 });
       resetHistory();
       showToast(t.toastListCreated, "success");
     } catch (err) {
@@ -273,7 +291,7 @@ export default function Home() {
         message: t.deleteListMessage(list?.title ?? ""),
         confirmLabel: t.delete,
         onConfirm: async () => {
-          if (!auth.accessToken) return;
+          if (!auth.accessToken || busy) return;
           setPendingAction(null);
           setBusy(true);
           try {
@@ -294,7 +312,7 @@ export default function Home() {
         },
       });
     },
-    [auth.accessToken, handleApiError, selectedTaskListId, showToast, taskLists, resetHistory, t],
+    [auth.accessToken, busy, handleApiError, selectedTaskListId, showToast, taskLists, resetHistory, t],
   );
 
   const handleImportClick = useCallback(() => {
@@ -317,8 +335,8 @@ export default function Home() {
       message: t.exportMessage,
       confirmLabel: t.export,
       onConfirm: async () => {
+        if (!mindMap || !auth.accessToken || busy) return;
         setPendingAction(null);
-        if (!mindMap || !auth.accessToken) return;
         setBusy(true);
         setBusyLabel(t.exporting);
         try {
@@ -336,7 +354,7 @@ export default function Home() {
         }
       },
     });
-  }, [auth.accessToken, handleApiError, mindMap, originalTitle, showToast, t]);
+  }, [auth.accessToken, busy, handleApiError, mindMap, originalTitle, showToast, t]);
 
   // Cmd/Ctrl+S -> export, Cmd/Ctrl+R -> import. Both just open the same
   // confirm modal the toolbar buttons do (never skip it) since both these
@@ -473,13 +491,13 @@ export default function Home() {
           onClick={() => setSidebarOpen(false)}
         />
       )}
-      {/* Bottom-sheet backdrop (mobile only) */}
-      {propertiesOpen && isMobile && (
-        <div
-          className="fixed inset-0 z-30 bg-slate-900/40 md:hidden"
-          onClick={() => setPropertiesOpen(false)}
-        />
-      )}
+      {/* No backdrop for the properties bottom sheet: max-h-[60vh] is a cap,
+          not a fixed height, so a separately-sized backdrop drifted out of
+          sync with the sheet's actual (often shorter) rendered height,
+          leaving a dimmed gap with no sheet under it. The sheet's own
+          always-visible close button (PropertiesPanel's PanelHeader) is
+          the dismiss affordance instead, and the canvas above stays fully
+          interactive since nothing covers it. */}
       <Sidebar
         taskLists={taskLists}
         selectedTaskListId={selectedTaskListId}
@@ -571,8 +589,8 @@ export default function Home() {
               <PanelIcon side="left" />
             </button>
           </div>
-          <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
-            {t.emptyStateHint}
+          <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
+            {taskLists.length === 0 ? t.emptyStateHintNoLists : t.emptyStateHint}
           </div>
         </div>
       )}

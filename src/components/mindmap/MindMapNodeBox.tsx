@@ -106,7 +106,10 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
             onKeyDown={handleKeyDown}
             onBlur={handleBlur}
             onClick={(e) => e.stopPropagation()}
-            className="w-full bg-transparent text-center outline-none"
+            // text-base (16px) overrides the smaller inherited KIND_STYLES
+            // size while editing — task/leaf boxes render at 14px/12px,
+            // both under the 16px iOS/Android auto-zoom-on-focus threshold
+            className="w-full bg-transparent text-center text-base outline-none"
           />
         </div>
       ) : (
@@ -132,11 +135,16 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
       {(showAddButton || showDeleteButton) && (
         <div
           className={[
-            "absolute flex gap-1.5 transition-opacity",
+            // hidden on mobile — PropertiesPanel's own mobile-only
+            // add/delete buttons are the intended touch path (see its
+            // PanelActions comment); once a node is centered into the
+            // visible strip above the bottom sheet, these floating
+            // buttons would otherwise show up redundantly alongside
+            // the sheet's own buttons for the same actions
+            "absolute hidden gap-1.5 transition-opacity md:flex",
             // hover reveals them for mouse users; `selected` reveals them
-            // unconditionally so touch users (no :hover) can still reach
-            // add/delete after tapping a node — this was the actual reason
-            // "add node" silently did nothing on mobile
+            // unconditionally too (kept for keyboard/focus-only selection
+            // on desktop, where there's no hover yet)
             selected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
             direction === "LR" ? "-top-3.5 right-1" : "-right-3.5 top-1",
           ].join(" ")}

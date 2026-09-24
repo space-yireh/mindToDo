@@ -181,8 +181,12 @@ export function Toolbar({
         <PanelIcon side="left" />
       </button>
 
-      {/* Center: import / export / show-completed */}
-      <div className="flex flex-1 items-center gap-1.5 overflow-hidden">
+      {/* Center: import / export / show-completed. Scrolls horizontally
+          instead of clipping — on narrow screens the fixed-width buttons
+          plus the right-side controls can exceed the viewport, and a clip
+          would make the show-completed toggle unreachable rather than just
+          visually tight. */}
+      <div className="flex flex-1 items-center gap-1.5 overflow-x-auto">
         <button
           type="button"
           onClick={onImportClick}

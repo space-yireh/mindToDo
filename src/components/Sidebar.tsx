@@ -1,7 +1,21 @@
 "use client";
 
 import { useLanguage } from "@/components/LanguageProvider";
+import { LegalFooter } from "@/components/LegalFooter";
 import type { TaskList } from "@/lib/types";
+
+function TrashIcon() {
+  return (
+    <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 20 20" stroke="currentColor" strokeWidth={1.5}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 6h12M8 6V4.5A1.5 1.5 0 019.5 3h1A1.5 1.5 0 0112 4.5V6m-6.5 0 .5 10a1 1 0 001 1h5a1 1 0 001-1l.5-10"
+      />
+      <path strokeLinecap="round" d="M8.5 9v5M11.5 9v5" />
+    </svg>
+  );
+}
 
 interface SidebarProps {
   taskLists: TaskList[];
@@ -38,19 +52,9 @@ export function Sidebar({
           : "-translate-x-full md:w-0 md:translate-x-0 md:overflow-hidden md:border-r-0",
       ].join(" ")}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-100 p-4 dark:border-slate-800">
-        <span className="text-base font-semibold text-slate-800 dark:text-slate-100">{t.sidebarTitle}</span>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
-          aria-label={t.closeSidebar}
-        >
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+      {/* Brand */}
+      <div className="flex items-center gap-2 border-b border-slate-100 p-4 dark:border-slate-800">
+        <span className="text-lg font-bold tracking-tight text-indigo-600 dark:text-indigo-400">MindToDo</span>
       </div>
 
       {/* New list button */}
@@ -98,15 +102,21 @@ export function Sidebar({
                 type="button"
                 onClick={() => onDelete(list.id)}
                 disabled={busy}
-                className="shrink-0 rounded-lg px-3 py-2 text-xs text-slate-400 opacity-0 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-400 disabled:cursor-not-allowed group-hover:opacity-100 md:transition-opacity transition-none"
+                className="flex shrink-0 items-center gap-1 rounded-lg px-3 py-2 text-xs text-slate-400 opacity-100 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/50 dark:hover:text-red-400 disabled:cursor-not-allowed md:opacity-0 md:group-hover:opacity-100 md:transition-opacity"
                 aria-label={t.deleteListAria}
+                title={t.deleteListAria}
               >
-                {t.delete}
+                <TrashIcon />
+                <span>{t.delete}</span>
               </button>
             </li>
           ))}
         </ul>
       </nav>
+
+      <div className="border-t border-slate-100 p-3 dark:border-slate-800">
+        <LegalFooter />
+      </div>
     </aside>
   );
 }

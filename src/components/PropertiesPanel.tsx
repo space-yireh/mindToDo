@@ -102,8 +102,11 @@ function PanelActions({ onAddChild, onDelete }: { onAddChild?: () => void; onDel
   );
 }
 
+// text-base (16px), not text-sm — iOS/Android auto-zoom the whole page on
+// focus when an input's font-size is under 16px, which is what made
+// focusing these fields feel like the screen was zooming in on mobile
 const inputClass =
-  "rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-500 w-full";
+  "rounded-lg border border-slate-300 px-3 py-2 text-base focus:border-indigo-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-indigo-500 w-full";
 
 export function PropertiesPanel({
   selection,

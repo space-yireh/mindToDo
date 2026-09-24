@@ -8,10 +8,12 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStoreApi,
   useViewport,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { mindMapNodeTypes } from "@/components/mindmap/MindMapNodeBox";
+import { useLanguage } from "@/components/LanguageProvider";
 import {
   MINDMAP_ROOT_ID,
   computeMindMapLayout,
@@ -71,6 +73,7 @@ const IGNORED_TYPE_TO_EDIT_KEYS = new Set([
 function ZoomControls() {
   const { zoomIn, zoomOut, zoomTo, fitView } = useReactFlow();
   const { zoom } = useViewport();
+  const { t } = useLanguage();
 
   const percentage = Math.round(zoom * 100);
 
@@ -83,7 +86,7 @@ function ZoomControls() {
         type="button"
         onClick={() => zoomOut({ duration: 200 })}
         className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-colors"
-        title="Zoom Out (Ctrl -)"
+        title={t.zoomOut}
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
@@ -94,7 +97,7 @@ function ZoomControls() {
         type="button"
         onClick={() => zoomTo(1, { duration: 200 })}
         className="h-7 min-w-[48px] px-1.5 text-center text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 rounded transition-colors"
-        title="Reset Zoom to 100%"
+        title={t.zoomReset}
       >
         {percentage}%
       </button>
@@ -103,7 +106,7 @@ function ZoomControls() {
         type="button"
         onClick={() => zoomIn({ duration: 200 })}
         className="flex h-7 w-7 items-center justify-center rounded text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-colors"
-        title="Zoom In (Ctrl +)"
+        title={t.zoomIn}
       >
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -116,7 +119,7 @@ function ZoomControls() {
         type="button"
         onClick={() => fitView({ maxZoom: 1.0, duration: 300 })}
         className="flex h-7 items-center gap-1 rounded px-2 text-xs font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:bg-slate-200 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-100 transition-colors"
-        title="Fit View (Ctrl 0)"
+        title={t.zoomFit}
       >
         <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path
@@ -125,7 +128,7 @@ function ZoomControls() {
             d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
           />
         </svg>
-        Fit
+        {t.fit}
       </button>
     </Panel>
   );
@@ -145,8 +148,10 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editingSeed, setEditingSeed] = useState<string | null>(null);
   const isMobile = useIsMobile();
+  const { t } = useLanguage();
 
-  const { zoomIn, zoomOut, fitView, setCenter } = useReactFlow();
+  const { zoomIn, zoomOut, zoomTo, fitView, setCenter, getZoom } = useReactFlow();
+  const storeApi = useStoreApi();
 
   function startEdit(nodeId: string, seed: string | null = null) {
     setEditingSeed(seed);
@@ -201,17 +206,32 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
     [mindMap, selection, showCompleted, editingNodeId, editingSeed],
   );
 
-  // Smoothly center on selected node when selection changes (desktop only)
+  // Smoothly center on selected node when selection changes. On mobile the
+  // properties bottom sheet covers the bottom ~60vh as soon as a node is
+  // selected (see page.tsx's auto-open effect), so a literal screen-center
+  // would land the node right behind it — instead aim for ~25% down from
+  // the top, inside the strip that stays visible above the sheet.
   useEffect(() => {
-    if (!selection || isMobile) return;
+    if (!selection) return;
     const targetId = selection.depth === 0 ? MINDMAP_ROOT_ID : selection.nodeId;
     const targetNode = nodes.find((n) => n.id === targetId);
     if (targetNode && targetNode.width && targetNode.height) {
       const centerX = targetNode.position.x + targetNode.width / 2;
-      const centerY = targetNode.position.y + targetNode.height / 2;
-      setCenter(centerX, centerY, { duration: 300 });
+      const nodeCenterY = targetNode.position.y + targetNode.height / 2;
+      // must pass the current zoom explicitly — React Flow's setCenter()
+      // defaults to `maxZoom` (2.0 here) when no zoom option is given, so
+      // omitting it snapped the canvas to 200% every time a node was
+      // selected (e.g. clicking a node to edit it)
+      const zoom = getZoom();
+      let centerY = nodeCenterY;
+      if (isMobile) {
+        const { height } = storeApi.getState();
+        const desiredScreenY = height * 0.25;
+        centerY = nodeCenterY + (height / 2 - desiredScreenY) / zoom;
+      }
+      setCenter(centerX, centerY, { zoom, duration: 300 });
     }
-  }, [selection, nodes, setCenter, isMobile]);
+  }, [selection, nodes, setCenter, getZoom, storeApi, isMobile]);
 
   // Re-fit view when showCompleted changes so layout zoom is optimized for current node count
   useEffect(() => {
@@ -238,6 +258,11 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
       if (e.key === "0") {
         e.preventDefault();
         fitView({ maxZoom: isMobile ? 0.7 : 1.0, duration: 300 });
+        return;
+      }
+      if (e.key === "1") {
+        e.preventDefault();
+        zoomTo(1, { duration: 200 });
         return;
       }
     }
@@ -316,6 +341,14 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--bg-dots, #CBD5E1)" />
         <ZoomControls />
+        {mindMap.nodes.length === 0 && (
+          <Panel
+            position="top-center"
+            className="pointer-events-none m-3 rounded-lg border border-indigo-200 bg-indigo-50/90 px-4 py-2 text-sm font-medium text-indigo-700 shadow-sm backdrop-blur-sm dark:border-indigo-900 dark:bg-indigo-950/80 dark:text-indigo-300"
+          >
+            {t.emptyCanvasHint}
+          </Panel>
+        )}
       </ReactFlow>
     </div>
   );

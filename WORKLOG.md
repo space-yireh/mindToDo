@@ -317,7 +317,40 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
     errors while the English text still rendered correctly after the
     sync; repeated with no saved preference to confirm the Korean default
     still renders cleanly too.
-17. **i18n (Korean + English)** — a lightweight custom system, not a framework (`next-intl`/`react-i18next` were considered and rejected as overkill for this app's scale). `src/lib/i18n.ts` holds two flat dictionary objects (`ko`, `en`) typed against each other (`en: typeof ko`, so TS enforces both stay in sync — no runtime key-lookup, no missing-translation risk); `src/components/LanguageProvider.tsx` is a Context provider (`localStorage` under `mindtodo_language`, `useLanguage()` hook returning `{ language, setLanguage, t }` where `t` is the whole resolved dictionary object — call sites read `t.someKey`, not `t('someKey')`). **Note**: it originally read `localStorage` synchronously in its `useState` initializer, matching `ThemeProvider.tsx`'s pattern at the time — entry #16 changed that (SSR hydration mismatch), so the two providers' initialization no longer match; see #16 before assuming they're identical. A `한`/`EN` segmented-control toggle sits in the toolbar next to the theme toggle. **Scope: UI chrome only** — buttons, labels, toasts, confirm-modal text, aria-labels, and the *default* title given to a newly created list/task/subtask (`t.newList`/`t.newTaskDefault`/`t.newSubtaskDefault`, threaded through `addTaskNode`/`addLeafNode`/`makeTaskNode`/`makeLeafNode` as an optional `title` param). **Never translated: user-entered content** — existing task/list titles, notes, dates are exactly what the user typed, in whatever language that is; this app is not a translation tool. `useGoogleAuth.ts` also pulls `useLanguage()` for its own error strings, since it's a hook (not just components) and hooks can call other hooks freely. One gotcha: several `useCallback` dependency arrays initially listed individual `t.xxx` keys, which is unnecessary (fixed to depend on the whole `t` object instead) and tripped `react-hooks/exhaustive-deps` on a member-expression call site (`t.deleteListMessage(...)`) — just depend on `t` itself everywhere, since it's one atomic object swap per language change anyway.
+17. **Real Terms/Privacy pages** (2026-09-25) — the launch-readiness pass
+    (entry #12) only added `LEGAL_LINKS` placeholder (`"#"`) links with a
+    "coming soon" toast. Replaced with actual content: `/terms` and
+    `/privacy` are plain Next.js Server Components (`src/app/terms/page.tsx`,
+    `src/app/privacy/page.tsx` — no `"use client"`, no hooks needed, since
+    the content is static Korean text with just a back-to-app link), sharing
+    a small `LegalPageLayout`/`LegalSection` wrapper
+    (`src/components/LegalPageLayout.tsx`) for the scrollable column +
+    heading/date-line chrome. `LEGAL_LINKS` in `src/lib/legal.ts` now points
+    to these real paths instead of `"#"`, so `LegalFooter.tsx`'s existing
+    placeholder-detection (`href === "#"`) automatically stops intercepting
+    the click and lets them navigate normally (opens in a new tab, per that
+    component's existing `target="_blank"` logic for non-placeholder hrefs
+    — no changes needed there). **Korean only**, not translated to English
+    — a deliberate, user-confirmed choice: legal text in two languages
+    means keeping both in sync on every future wording change, and neither
+    Google's OAuth verification nor Korean law requires an English version;
+    an English one can be added later if actually needed. Operator identity
+    (공간이레 / space.yireh@gmail.com) and the 2026-09-25 effective date are
+    hardcoded directly in both pages' JSX, not pulled from any shared
+    constant — they're one-time legal facts, not app config that changes
+    at runtime.
+    **Correction to the source draft** (a `# MindToDo 이용약관 및
+    개인정보처리방침 (초안).md` file the user had open, not authored by an
+    earlier session of this project): its 개인정보처리방침 §6 claimed the
+    app stores nothing in `localStorage`. Grepped the codebase
+    (`ThemeProvider.tsx`, `LanguageProvider.tsx`) and confirmed it actually
+    *does* — theme (`mindtodo_theme`) and language (`mindtodo_language`)
+    preferences, added after that draft was written. Rewrote that section
+    to accurately disclose this (non-personal UI preferences only, never
+    sent to a server) rather than publish a factually wrong privacy policy
+    — this mattered enough to flag explicitly since Google's OAuth
+    verification review will read this exact page.
+18. **i18n (Korean + English)** — a lightweight custom system, not a framework (`next-intl`/`react-i18next` were considered and rejected as overkill for this app's scale). `src/lib/i18n.ts` holds two flat dictionary objects (`ko`, `en`) typed against each other (`en: typeof ko`, so TS enforces both stay in sync — no runtime key-lookup, no missing-translation risk); `src/components/LanguageProvider.tsx` is a Context provider (`localStorage` under `mindtodo_language`, `useLanguage()` hook returning `{ language, setLanguage, t }` where `t` is the whole resolved dictionary object — call sites read `t.someKey`, not `t('someKey')`). **Note**: it originally read `localStorage` synchronously in its `useState` initializer, matching `ThemeProvider.tsx`'s pattern at the time — entry #16 changed that (SSR hydration mismatch), so the two providers' initialization no longer match; see #16 before assuming they're identical. A `한`/`EN` segmented-control toggle sits in the toolbar next to the theme toggle. **Scope: UI chrome only** — buttons, labels, toasts, confirm-modal text, aria-labels, and the *default* title given to a newly created list/task/subtask (`t.newList`/`t.newTaskDefault`/`t.newSubtaskDefault`, threaded through `addTaskNode`/`addLeafNode`/`makeTaskNode`/`makeLeafNode` as an optional `title` param). **Never translated: user-entered content** — existing task/list titles, notes, dates are exactly what the user typed, in whatever language that is; this app is not a translation tool. `useGoogleAuth.ts` also pulls `useLanguage()` for its own error strings, since it's a hook (not just components) and hooks can call other hooks freely. One gotcha: several `useCallback` dependency arrays initially listed individual `t.xxx` keys, which is unnecessary (fixed to depend on the whole `t` object instead) and tripped `react-hooks/exhaustive-deps` on a member-expression call site (`t.deleteListMessage(...)`) — just depend on `t` itself everywhere, since it's one atomic object swap per language change anyway.
 
 ## Current keyboard shortcuts (canvas focused, a node selected)
 

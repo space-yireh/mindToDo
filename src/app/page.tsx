@@ -47,6 +47,7 @@ export default function Home() {
   const [selection, setSelection] = useState<Selection>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [busyLabel, setBusyLabel] = useState<string | undefined>();
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [propertiesOpen, setPropertiesOpen] = useState(true);
@@ -215,6 +216,7 @@ export default function Home() {
     async (taskListId: string, taskListTitle: string) => {
       if (!auth.accessToken) return;
       setBusy(true);
+      setBusyLabel("가져오는 중…");
       try {
         const imported = await importMindMap(auth.accessToken, taskListId, taskListTitle);
         setMindMap(imported);
@@ -227,6 +229,7 @@ export default function Home() {
         handleApiError(err, "가져오기 실패");
       } finally {
         setBusy(false);
+        setBusyLabel(undefined);
       }
     },
     [auth.accessToken, handleApiError, showToast, resetHistory],
@@ -317,6 +320,7 @@ export default function Home() {
         setPendingAction(null);
         if (!mindMap || !auth.accessToken) return;
         setBusy(true);
+        setBusyLabel("내보내는 중…");
         try {
           await exportMindMap(auth.accessToken, mindMap, originalTitle);
           setOriginalTitle(mindMap.title);
@@ -328,6 +332,7 @@ export default function Home() {
           handleApiError(err, "내보내기 실패");
         } finally {
           setBusy(false);
+          setBusyLabel(undefined);
         }
       },
     });
@@ -432,6 +437,8 @@ export default function Home() {
             showCompleted={showCompleted}
             onToggleShowCompleted={() => setShowCompleted((v) => !v)}
             disabled={busy}
+            busy={busy}
+            busyLabel={busyLabel}
             sidebarOpen={sidebarOpen}
             onToggleSidebar={() => setSidebarOpen((v) => !v)}
             propertiesOpen={propertiesOpen}

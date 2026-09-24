@@ -71,8 +71,12 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
 6. **Light theme + responsive panels** — full light theme (indigo-600
    accent), Sidebar/PropertiesPanel collapse to width 0 on desktop and
    become slide-in overlay drawers with a backdrop under `md` (768px).
-7. **Zoom control & fitView bounds** (Branch: `feat/zoom-controls-and-fitview`) — bounded `fitView` with `maxZoom: 1.0` (prevents huge nodes when few tasks exist) and `minZoom: 0.35` (prevents tiny unreadable nodes when many tasks exist). Added floating `ZoomControls` overlay panel (`-`, `100%` reset, `+`, `Fit`), `Cmd/Ctrl + +/-/0` keyboard shortcuts, smooth auto-centering on active node selection, default `showCompleted` set to `false`, and automatic `fitView` re-calculation on toggling completed tasks.
+7. **Zoom control & fitView bounds** (Branch: `feat/zoom-controls-and-fitview`) — bounded `fitView` with `maxZoom: 1.0` (prevents huge nodes when few tasks exist) and `minZoom: 0.35` (prevents tiny unreadable nodes when many tasks exist). Added floating `ZoomControls` overlay panel (`-`, `100%` reset, `+`, `Fit`), `Cmd/Ctrl + +/-/0` keyboard shortcuts, smooth auto-centering on active node selection, default `showCompleted` set to `false`, and automatic `fitView` re-calculation on toggling completed tasks. (No longer deferred — superseded the "zoom explicitly deferred" note from step 3/6.)
 8. **Theme system (Light / Dark / System)** (Branch: `feat/theme-system`) — implemented `ThemeProvider` with `useTheme` hook supporting 3 modes (`light`, `dark`, `system`), persistent `localStorage` storage, OS `prefers-color-scheme` auto-switching, dark mode CSS variables for React Flow edges & grid background dots, theme toggle segment control in toolbar, and dark theme styling across all UI panels, nodes, and modals.
+9. **Mobile UX pass** (`d9293ef` and follow-ups) — Sidebar becomes a full-screen drawer on mobile, PropertiesPanel becomes a bottom sheet (`fixed bottom-0`, `max-h-[60vh]`, drag handle, slide up/down) that **auto-opens whenever `selection` changes while `isMobile`** (see the `prevSelectionRef` effect in `page.tsx`), compact toolbar, mobile-aware `fitView`/`maxZoom`, loading spinners on import/export.
+10. **Mobile touch-add/delete fix** — after step 9 shipped, node add/delete silently did nothing on a real touch device. Root cause and fix in the bugs list below (#8). Short version: the node's own `+`/`×` buttons were hover-only (invisible on touch) *and*, even after making them selection-visible, the auto-opening bottom sheet from step 9 sits on top of them (`z-40`, fixed, covers the bottom 60vh) the instant a node is selected. Fixed by adding matching `+ 하위 항목 추가` / `삭제` buttons directly inside `PropertiesPanel` (mobile-only, `md:hidden`), wired through new `handleAddTaskNode`/`handleAddLeafNode`/`handleDeleteTaskNode`/`handleDeleteLeafNode` callbacks in `page.tsx` that are now shared between the canvas and the panel. `Tab`/`Enter` keyboard add-node still won't work on mobile — that's expected, not a bug, since there's no hardware keyboard; the panel buttons are mobile's equivalent path, not a keyboard emulation.
+11. **"완료된 할일 보기" unlabeled-checkbox fix** — the compact mobile toolbar (step 9) hid the label text below `sm` (`hidden sm:inline`) to save space, but left a bare checkbox with zero indication of what it did. Replaced the checkbox+label with an icon toggle button (`EyeIcon`/`EyeIcon off` in `Toolbar.tsx`) matching the existing sidebar/properties-panel toggle button style (`aria-pressed`, highlighted background when active) — consistent with how the rest of the compact toolbar already communicates state through icons, not hidden text.
+12. **i18n (Korean + English)** — a lightweight custom system, not a framework (`next-intl`/`react-i18next` were considered and rejected as overkill for this app's scale). `src/lib/i18n.ts` holds two flat dictionary objects (`ko`, `en`) typed against each other (`en: typeof ko`, so TS enforces both stay in sync — no runtime key-lookup, no missing-translation risk); `src/components/LanguageProvider.tsx` mirrors `ThemeProvider.tsx`'s exact pattern (Context + `localStorage` under `mindtodo_language`, `useLanguage()` hook returning `{ language, setLanguage, t }` where `t` is the whole resolved dictionary object — call sites read `t.someKey`, not `t('someKey')`). A `한`/`EN` segmented-control toggle sits in the toolbar next to the theme toggle. **Scope: UI chrome only** — buttons, labels, toasts, confirm-modal text, aria-labels, and the *default* title given to a newly created list/task/subtask (`t.newList`/`t.newTaskDefault`/`t.newSubtaskDefault`, threaded through `addTaskNode`/`addLeafNode`/`makeTaskNode`/`makeLeafNode` as an optional `title` param). **Never translated: user-entered content** — existing task/list titles, notes, dates are exactly what the user typed, in whatever language that is; this app is not a translation tool. `useGoogleAuth.ts` also pulls `useLanguage()` for its own error strings, since it's a hook (not just components) and hooks can call other hooks freely. One gotcha: several `useCallback` dependency arrays initially listed individual `t.xxx` keys, which is unnecessary (fixed to depend on the whole `t` object instead) and tripped `react-hooks/exhaustive-deps` on a member-expression call site (`t.deleteListMessage(...)`) — just depend on `t` itself everywhere, since it's one atomic object swap per language change anyway.
 
 ## Current keyboard shortcuts (canvas focused, a node selected)
 
@@ -95,6 +99,11 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
 
 Adding a node (Tab/Enter/`+` button) always drops straight into edit mode —
 this was a deliberate fix so keyboard flow never breaks stride.
+
+**None of this table applies on mobile** — there's no hardware keyboard.
+The touch equivalents are: tap a node to select (auto-opens the properties
+bottom sheet), then use that sheet's `+ 하위 항목 추가` / `삭제` buttons and
+its title/notes/due/complete fields. See "What's been built" #9–10.
 
 ## Non-obvious bugs found & fixed (read before re-touching the canvas)
 
@@ -134,6 +143,21 @@ These cost real debugging time — don't reintroduce them:
    `width: 0`). `PropertiesPanel`'s collapse animation looked broken (a
    thin sliver stayed visible) until padding was moved to an inner
    fixed-width wrapper, leaving the outer `<aside>` free to actually hit 0.
+8. **`group-hover:opacity-100` has no touch equivalent, and a mobile overlay
+   can sit on top of what it does reveal.** The node's `+`/`×` buttons were
+   gated purely on CSS `:hover`, so on a touchscreen they were permanently
+   invisible — tapping a node "did nothing" because there was nothing
+   visible to tap. Fixed the visibility (`selected` now also reveals them,
+   not just hover), but that alone wasn't sufficient: `PropertiesPanel`'s
+   mobile bottom sheet (added later, `z-40`, `fixed bottom-0`) auto-opens on
+   selection and physically covers those same buttons on a phone-sized
+   screen. **General lesson: any hover-only affordance needs a
+   selection/tap-based equivalent, and every mobile overlay needs to be
+   checked against what it might cover on real device viewport sizes, not
+   just resized-desktop-browser testing** — this one only showed up when
+   testing was switched from `page.locator(...).click()` (mouse event) to
+   `page.locator(...).tap()` (real touch event) in an emulated mobile
+   device context; a resized desktop browser click wouldn't have caught it.
 
 ## Known limitations / accepted gaps
 
@@ -143,18 +167,30 @@ These cost real debugging time — don't reintroduce them:
   after `F2`/`Escape` (input already focused first) avoids this entirely.
   Not fully fixed — would need a KityMinder-style persistent hidden
   input/receiver element to fix properly.
-- **Zoom controls**: explicitly deferred by the user ("다음 섹션 때 다시
-  검토하자") — not implemented at all yet.
-- **Mobile drawers don't auto-close**: selecting a list or a node doesn't
-  auto-close the corresponding drawer on mobile; the user has to tap the
-  toolbar toggle or the backdrop. Flagged as a possible follow-up, not
-  requested yet.
+- **Mobile drawers don't auto-close**: selecting a list doesn't auto-close
+  the Sidebar drawer on mobile (the user has to tap the toolbar toggle or
+  the backdrop). The PropertiesPanel bottom sheet *does* now auto-open on
+  node selection (step 9) — just not the reverse.
+- **Korean IME on the properties-panel text fields** (title/notes) hasn't
+  been specifically re-tested since the mobile pass — the canvas inline
+  editor's IME fix (bug #5) doesn't apply there since it's a normal
+  controlled `<input>`/`<textarea>`, which should be IME-safe by default,
+  but hasn't been explicitly verified on a real device.
 - **Undo/redo** only covers local mindmap edits (add/delete/title/notes/
   due/status). Import/export are intentionally excluded (they're Google API
   calls, not locally reversible). History resets on list switch/import/
   create/delete.
 - Descoped earlier by explicit request: hotbox radial menu, bold/italic,
   "add parent" node.
+- **`layout.tsx`'s `<meta name="description">` stays Korean always** —
+  it's server-rendered metadata, generated before the client-side language
+  preference (localStorage) is known, and there's no SEO need to solve this
+  properly for a personal single-user app. Everything else respects the
+  language toggle; just this one `<head>` tag doesn't.
+- Only Korean and English exist (`src/lib/i18n.ts`). Adding a third
+  language means adding a matching `Record<string, ...>` object there and a
+  third button in `Toolbar.tsx`'s `LanguageToggle` — no other files need to
+  change, since every component already reads through `t`.
 
 ## How this was verified (repeat this pattern for new work)
 
@@ -180,16 +216,11 @@ No test suite exists, so every change in this project was verified by:
 
 ## Git state
 
-Commits so far (check `git log` for current HEAD — this list will go
-stale):
+Don't rely on any commit list pasted here — it goes stale immediately. Run
+`git log --oneline -15` and `git status` yourself before assuming what's
+committed vs. in-progress.
 
-```
-5854b1d style: update color scheme and improve component styling for better UI consistency
-deebe93 refactor: replace Canvas component with MindMapCanvas and MindMapNodeBox for improved structure and functionality
-e5d6e95 feat: add Canvas, ConfirmModal, LoginScreen, PropertiesPanel, Sidebar, ToastProvider, Toolbar components
-```
-
-Note: commits in this repo appear to happen automatically (not via explicit
-`git commit` requests in the conversations that produced this log) — don't
-assume uncommitted work is lost, but don't assume it's committed either;
-check `git status` first.
+Note: commits in this repo appear to happen automatically in some sessions
+(not via an explicit `git commit` request in the conversation that produced
+them) — don't assume uncommitted work is lost, but don't assume it's
+committed either; always check `git status` first.

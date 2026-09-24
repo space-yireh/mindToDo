@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 interface ConfirmModalProps {
   title: string;
@@ -14,11 +15,12 @@ interface ConfirmModalProps {
 export function ConfirmModal({
   title,
   message,
-  confirmLabel = "확인",
-  cancelLabel = "취소",
+  confirmLabel,
+  cancelLabel,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const { t } = useLanguage();
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -50,7 +52,7 @@ export function ConfirmModal({
             onClick={onCancel}
             className="rounded-md px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           >
-            {cancelLabel}
+            {cancelLabel ?? t.cancel}
           </button>
           <button
             ref={confirmButtonRef}
@@ -58,7 +60,7 @@ export function ConfirmModal({
             onClick={onConfirm}
             className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-700 dark:bg-indigo-600 dark:hover:bg-indigo-500"
           >
-            {confirmLabel}
+            {confirmLabel ?? t.confirm}
           </button>
         </div>
       </div>

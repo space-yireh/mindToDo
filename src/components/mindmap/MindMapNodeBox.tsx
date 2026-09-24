@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { Handle, type NodeProps } from "@xyflow/react";
+import { useLanguage } from "@/components/LanguageProvider";
 import type { MindMapNode, MindMapNodeKind } from "@/lib/mindmapLayout";
 import { NODE_SIZE } from "@/lib/mindmapLayout";
 
@@ -14,6 +15,7 @@ const KIND_STYLES: Record<MindMapNodeKind, string> = {
 const SELECTED_RING = "ring-2 ring-offset-2 ring-offset-slate-50 ring-amber-400 dark:ring-offset-slate-900";
 
 function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
+  const { t } = useLanguage();
   const {
     kind,
     title,
@@ -123,15 +125,20 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
             isCompleted ? "opacity-50" : "",
           ].join(" ")}
         >
-          <span className={isCompleted ? "line-through" : ""}>{title || "(제목 없음)"}</span>
+          <span className={isCompleted ? "line-through" : ""}>{title || t.untitled}</span>
         </button>
       )}
 
       {(showAddButton || showDeleteButton) && (
         <div
           className={[
-            "absolute flex gap-1 opacity-0 transition-opacity group-hover:opacity-100",
-            direction === "LR" ? "-top-3 right-1" : "-right-3 top-1",
+            "absolute flex gap-1.5 transition-opacity",
+            // hover reveals them for mouse users; `selected` reveals them
+            // unconditionally so touch users (no :hover) can still reach
+            // add/delete after tapping a node — this was the actual reason
+            // "add node" silently did nothing on mobile
+            selected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+            direction === "LR" ? "-top-3.5 right-1" : "-right-3.5 top-1",
           ].join(" ")}
         >
           {showAddButton && (
@@ -141,9 +148,9 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
                 e.stopPropagation();
                 onAddChild?.();
               }}
-              aria-label="자식 노드 추가"
-              title="자식 노드 추가"
-              className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-xs font-bold text-white shadow hover:bg-emerald-400"
+              aria-label={t.addChildNodeAria}
+              title={t.addChildNodeAria}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-sm font-bold text-white shadow hover:bg-emerald-400 active:bg-emerald-600"
             >
               +
             </button>
@@ -155,9 +162,9 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
                 e.stopPropagation();
                 onDelete?.();
               }}
-              aria-label="노드 삭제"
-              title="노드 삭제"
-              className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white shadow hover:bg-red-400"
+              aria-label={t.deleteNodeAria}
+              title={t.deleteNodeAria}
+              className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500 text-sm font-bold text-white shadow hover:bg-red-400 active:bg-red-600"
             >
               ×
             </button>

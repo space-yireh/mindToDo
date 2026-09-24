@@ -1,13 +1,17 @@
 import { makeLeafNode, makeTaskNode } from "./mindmapConvert";
 import type { LeafNode, MindMap, Selection } from "./types";
 
-export function addTaskNode(mindMap: MindMap): { mindMap: MindMap; nodeId: string } {
-  const node = makeTaskNode();
+export function addTaskNode(mindMap: MindMap, title?: string): { mindMap: MindMap; nodeId: string } {
+  const node = makeTaskNode(title);
   return { mindMap: { ...mindMap, nodes: [...mindMap.nodes, node] }, nodeId: node.id };
 }
 
-export function addLeafNode(mindMap: MindMap, parentId: string): { mindMap: MindMap; nodeId: string } {
-  const leaf = makeLeafNode();
+export function addLeafNode(
+  mindMap: MindMap,
+  parentId: string,
+  title?: string,
+): { mindMap: MindMap; nodeId: string } {
+  const leaf = makeLeafNode(title);
   return {
     mindMap: {
       ...mindMap,

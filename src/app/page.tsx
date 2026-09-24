@@ -8,6 +8,7 @@ import { PropertiesPanel } from "@/components/PropertiesPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { PanelIcon, Toolbar } from "@/components/Toolbar";
 import { useToast } from "@/components/ToastProvider";
+import { useLanguage } from "@/components/LanguageProvider";
 import {
   GoogleTasksApiError,
   createTaskList,
@@ -39,6 +40,7 @@ interface PendingAction {
 export default function Home() {
   const auth = useGoogleAuth();
   const { showToast } = useToast();
+  const { t } = useLanguage();
 
   const [taskLists, setTaskLists] = useState<TaskList[]>([]);
   const [selectedTaskListId, setSelectedTaskListId] = useState<string | null>(null);
@@ -168,13 +170,13 @@ export default function Home() {
     (err: unknown, fallbackMessage: string) => {
       if (err instanceof GoogleTasksApiError && err.status === 401) {
         auth.handleUnauthorized();
-        showToast("세션이 만료되었습니다. 다시 로그인해주세요.", "error");
+        showToast(t.toastSessionExpired, "error");
         return;
       }
       const message = err instanceof Error ? err.message : fallbackMessage;
       showToast(`${fallbackMessage}: ${message}`, "error");
     },
-    [auth, showToast],
+    [auth, showToast, t],
   );
 
   // load task lists once signed in
@@ -189,7 +191,7 @@ export default function Home() {
         if (cancelled) return;
         setTaskLists(items.map((i) => ({ id: i.id, title: i.title })));
       } catch (err) {
-        if (!cancelled) handleApiError(err, "목록을 불러오지 못했습니다");
+        if (!cancelled) handleApiError(err, t.toastListsLoadFailed);
       } finally {
         if (!cancelled) setBusy(false);
       }
@@ -216,7 +218,7 @@ export default function Home() {
     async (taskListId: string, taskListTitle: string) => {
       if (!auth.accessToken) return;
       setBusy(true);
-      setBusyLabel("가져오는 중…");
+      setBusyLabel(t.importing);
       try {
         const imported = await importMindMap(auth.accessToken, taskListId, taskListTitle);
         setMindMap(imported);
@@ -224,21 +226,21 @@ export default function Home() {
         setSelectedTaskListId(taskListId);
         setSelection(null);
         resetHistory();
-        showToast("가져오기 완료", "success");
+        showToast(t.toastImportSuccess, "success");
       } catch (err) {
-        handleApiError(err, "가져오기 실패");
+        handleApiError(err, t.toastImportFailed);
       } finally {
         setBusy(false);
         setBusyLabel(undefined);
       }
     },
-    [auth.accessToken, handleApiError, showToast, resetHistory],
+    [auth.accessToken, handleApiError, showToast, resetHistory, t],
   );
 
   const handleSelectTaskList = useCallback(
     (taskListId: string) => {
       if (taskListId === selectedTaskListId || busy) return;
-      const list = taskLists.find((t) => t.id === taskListId);
+      const list = taskLists.find((tl) => tl.id === taskListId);
       void doImport(taskListId, list?.title ?? "");
     },
     [busy, doImport, selectedTaskListId, taskLists],
@@ -248,95 +250,93 @@ export default function Home() {
     if (!auth.accessToken || busy) return;
     setBusy(true);
     try {
-      const created = await createTaskList(auth.accessToken, "새 목록");
+      const created = await createTaskList(auth.accessToken, t.newList);
       setTaskLists((prev) => [...prev, { id: created.id, title: created.title }]);
       setSelectedTaskListId(created.id);
       setMindMap(emptyMindMap(created.id, created.title));
       setOriginalTitle(created.title);
       setSelection(null);
       resetHistory();
-      showToast("새 목록을 만들었습니다", "success");
+      showToast(t.toastListCreated, "success");
     } catch (err) {
-      handleApiError(err, "목록 생성 실패");
+      handleApiError(err, t.toastListCreateFailed);
     } finally {
       setBusy(false);
     }
-  }, [auth.accessToken, busy, handleApiError, showToast, resetHistory]);
+  }, [auth.accessToken, busy, handleApiError, showToast, resetHistory, t]);
 
   const handleDeleteTaskList = useCallback(
     (taskListId: string) => {
-      const list = taskLists.find((t) => t.id === taskListId);
+      const list = taskLists.find((tl) => tl.id === taskListId);
       setPendingAction({
-        title: "목록 삭제",
-        message: `"${list?.title ?? ""}" 목록을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`,
-        confirmLabel: "삭제",
+        title: t.deleteListTitle,
+        message: t.deleteListMessage(list?.title ?? ""),
+        confirmLabel: t.delete,
         onConfirm: async () => {
           if (!auth.accessToken) return;
           setPendingAction(null);
           setBusy(true);
           try {
             await deleteTaskList(auth.accessToken, taskListId);
-            setTaskLists((prev) => prev.filter((t) => t.id !== taskListId));
+            setTaskLists((prev) => prev.filter((tl) => tl.id !== taskListId));
             if (taskListId === selectedTaskListId) {
               setSelectedTaskListId(null);
               setMindMap(null);
               setSelection(null);
               resetHistory();
             }
-            showToast("목록을 삭제했습니다", "success");
+            showToast(t.toastListDeleted, "success");
           } catch (err) {
-            handleApiError(err, "목록 삭제 실패");
+            handleApiError(err, t.toastListDeleteFailed);
           } finally {
             setBusy(false);
           }
         },
       });
     },
-    [auth.accessToken, handleApiError, selectedTaskListId, showToast, taskLists, resetHistory],
+    [auth.accessToken, handleApiError, selectedTaskListId, showToast, taskLists, resetHistory, t],
   );
 
   const handleImportClick = useCallback(() => {
     if (!selectedTaskListId || !mindMap) return;
     setPendingAction({
-      title: "가져오기",
-      message:
-        "Google Tasks의 최신 데이터를 불러옵니다.\n현재 마인드맵에 저장하지 않은 변경사항은 사라집니다.",
-      confirmLabel: "가져오기",
+      title: t.importTitle,
+      message: t.importMessage,
+      confirmLabel: t.import,
       onConfirm: () => {
         setPendingAction(null);
         void doImport(selectedTaskListId, mindMap.title);
       },
     });
-  }, [doImport, mindMap, selectedTaskListId]);
+  }, [doImport, mindMap, selectedTaskListId, t]);
 
   const handleExportClick = useCallback(() => {
     if (!mindMap || !auth.accessToken) return;
     setPendingAction({
-      title: "내보내기",
-      message:
-        "Google Tasks의 기존 할일을 모두 삭제하고\n현재 마인드맵 상태로 다시 생성합니다.\n완료 시각 등 기존 메타데이터는 초기화됩니다.",
-      confirmLabel: "내보내기",
+      title: t.exportTitle,
+      message: t.exportMessage,
+      confirmLabel: t.export,
       onConfirm: async () => {
         setPendingAction(null);
         if (!mindMap || !auth.accessToken) return;
         setBusy(true);
-        setBusyLabel("내보내는 중…");
+        setBusyLabel(t.exporting);
         try {
           await exportMindMap(auth.accessToken, mindMap, originalTitle);
           setOriginalTitle(mindMap.title);
           setTaskLists((prev) =>
-            prev.map((t) => (t.id === mindMap.taskListId ? { ...t, title: mindMap.title } : t)),
+            prev.map((tl) => (tl.id === mindMap.taskListId ? { ...tl, title: mindMap.title } : tl)),
           );
-          showToast("내보내기 완료", "success");
+          showToast(t.toastExportSuccess, "success");
         } catch (err) {
-          handleApiError(err, "내보내기 실패");
+          handleApiError(err, t.toastExportFailed);
         } finally {
           setBusy(false);
           setBusyLabel(undefined);
         }
       },
     });
-  }, [auth.accessToken, handleApiError, mindMap, originalTitle, showToast]);
+  }, [auth.accessToken, handleApiError, mindMap, originalTitle, showToast, t]);
 
   // Cmd/Ctrl+S -> export, Cmd/Ctrl+R -> import. Both just open the same
   // confirm modal the toolbar buttons do (never skip it) since both these
@@ -379,6 +379,68 @@ export default function Home() {
     },
     [mindMap, selection, commitMindMap],
   );
+
+  // shared by the canvas (hover buttons + keyboard) and, on mobile, the
+  // properties sheet's own add/delete buttons (see PropertiesPanel.tsx —
+  // the sheet covers the canvas's floating buttons there, so it needs its
+  // own reliable path to the same actions)
+  const handleAddTaskNode = useCallback((): string => {
+    if (!mindMap) return "";
+    const { mindMap: next, nodeId } = addTaskNode(mindMap, t.newTaskDefault);
+    commitMindMap(next, { immediate: true });
+    setSelection({ depth: 1, nodeId });
+    return nodeId;
+  }, [mindMap, commitMindMap, t]);
+
+  const handleAddLeafNode = useCallback(
+    (parentId: string): string => {
+      if (!mindMap) return "";
+      const { mindMap: next, nodeId } = addLeafNode(mindMap, parentId, t.newSubtaskDefault);
+      commitMindMap(next, { immediate: true });
+      setSelection({ depth: 2, nodeId, parentId });
+      return nodeId;
+    },
+    [mindMap, commitMindMap, t],
+  );
+
+  const handleDeleteTaskNode = useCallback(
+    (nodeId: string) => {
+      if (!mindMap) return;
+      if (selection?.depth === 1 && selection.nodeId === nodeId) {
+        setSelection(getPostDeleteSelection(mindMap, selection));
+      }
+      commitMindMap(removeTaskNode(mindMap, nodeId), { immediate: true });
+    },
+    [mindMap, selection, commitMindMap],
+  );
+
+  const handleDeleteLeafNode = useCallback(
+    (parentId: string, nodeId: string) => {
+      if (!mindMap) return;
+      if (selection?.depth === 2 && selection.nodeId === nodeId) {
+        setSelection(getPostDeleteSelection(mindMap, selection));
+      }
+      commitMindMap(removeLeafNode(mindMap, parentId, nodeId), { immediate: true });
+    },
+    [mindMap, selection, commitMindMap],
+  );
+
+  // depth-aware add/delete for the properties panel's own buttons (mobile)
+  const propertiesOnAddChild = !selection
+    ? undefined
+    : selection.depth === 0
+      ? () => handleAddTaskNode()
+      : selection.depth === 1
+        ? () => handleAddLeafNode(selection.nodeId)
+        : undefined;
+
+  const propertiesOnDelete = !selection
+    ? undefined
+    : selection.depth === 1
+      ? () => handleDeleteTaskNode(selection.nodeId)
+      : selection.depth === 2
+        ? () => handleDeleteLeafNode(selection.parentId, selection.nodeId)
+        : undefined;
 
   // On mobile, auto-open properties bottom sheet when a node is selected
   const prevSelectionRef = useRef<Selection>(null);
@@ -452,40 +514,18 @@ export default function Home() {
               onSelectRoot={() => setSelection({ depth: 0 })}
               onSelectTaskNode={(nodeId) => setSelection({ depth: 1, nodeId })}
               onSelectLeafNode={(nodeId, parentId) => setSelection({ depth: 2, nodeId, parentId })}
-              onAddTaskNode={() => {
-                if (!mindMap) return "";
-                const { mindMap: next, nodeId } = addTaskNode(mindMap);
-                commitMindMap(next, { immediate: true });
-                setSelection({ depth: 1, nodeId });
-                return nodeId;
-              }}
-              onAddLeafNode={(parentId) => {
-                if (!mindMap) return "";
-                const { mindMap: next, nodeId } = addLeafNode(mindMap, parentId);
-                commitMindMap(next, { immediate: true });
-                setSelection({ depth: 2, nodeId, parentId });
-                return nodeId;
-              }}
-              onDeleteTaskNode={(nodeId) => {
-                if (!mindMap) return;
-                if (selection?.depth === 1 && selection.nodeId === nodeId) {
-                  setSelection(getPostDeleteSelection(mindMap, selection));
-                }
-                commitMindMap(removeTaskNode(mindMap, nodeId), { immediate: true });
-              }}
-              onDeleteLeafNode={(parentId, nodeId) => {
-                if (!mindMap) return;
-                if (selection?.depth === 2 && selection.nodeId === nodeId) {
-                  setSelection(getPostDeleteSelection(mindMap, selection));
-                }
-                commitMindMap(removeLeafNode(mindMap, parentId, nodeId), { immediate: true });
-              }}
+              onAddTaskNode={handleAddTaskNode}
+              onAddLeafNode={handleAddLeafNode}
+              onDeleteTaskNode={handleDeleteTaskNode}
+              onDeleteLeafNode={handleDeleteLeafNode}
               onRootTitleChange={handleRootTitleChange}
               onTitleChange={handleSelectedTitleChange}
             />
             <PropertiesPanel
               selection={selection}
               rootTitle={mindMap.title}
+              onAddChild={propertiesOnAddChild}
+              onDelete={propertiesOnDelete}
               onRootTitleChange={handleRootTitleChange}
               selectedNode={selectedNode}
               onTitleChange={handleSelectedTitleChange}
@@ -525,14 +565,14 @@ export default function Home() {
             <button
               type="button"
               onClick={() => setSidebarOpen((v) => !v)}
-              aria-label="목록 패널 토글"
+              aria-label={t.toggleSidebar}
               className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100"
             >
               <PanelIcon side="left" />
             </button>
           </div>
           <div className="flex flex-1 items-center justify-center text-sm text-slate-400">
-            왼쪽에서 목록을 선택하거나 새로 만들어주세요.
+            {t.emptyStateHint}
           </div>
         </div>
       )}

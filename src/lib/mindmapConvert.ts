@@ -19,10 +19,10 @@ export function emptyMindMap(taskListId: string, title: string): MindMap {
   return { taskListId, title, nodes: [] };
 }
 
-export function makeTaskNode(): TaskNode {
+export function makeTaskNode(title = "새 할일"): TaskNode {
   return {
     id: newId(),
-    title: "새 할일",
+    title,
     notes: "",
     due: null,
     status: "needsAction",
@@ -30,10 +30,10 @@ export function makeTaskNode(): TaskNode {
   };
 }
 
-export function makeLeafNode(): LeafNode {
+export function makeLeafNode(title = "새 세부 할일"): LeafNode {
   return {
     id: newId(),
-    title: "새 세부 할일",
+    title,
     notes: "",
     due: null,
     status: "needsAction",

@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { LoadingBar, Spinner } from "@/components/LoadingBar";
 import { useTheme } from "@/components/ThemeProvider";
+import { useLanguage } from "@/components/LanguageProvider";
 
 const emptySubscribe = () => () => {};
 function useIsMounted() {
@@ -40,8 +41,28 @@ export function PanelIcon({ side }: { side: "left" | "right" }) {
   );
 }
 
+// eye / eye-with-slash — used for the "show completed" toggle so it reads
+// as a real control on narrow screens instead of a bare, unlabeled checkbox
+// (the label text is hidden below `sm` to save space in the packed mobile
+// toolbar; the icon carries the meaning there instead)
+function EyeIcon({ off }: { off: boolean }) {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path
+        d="M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5-8-5.5-8-5.5Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <circle cx="10" cy="10" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+      {off && <path d="M3 17L17 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />}
+    </svg>
+  );
+}
+
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const { t } = useLanguage();
   const mounted = useIsMounted();
 
   const activeTheme = mounted ? theme : "system";
@@ -58,8 +79,8 @@ function ThemeToggle() {
         type="button"
         onClick={() => setTheme("light")}
         className={`${btnBase} ${activeTheme === "light" ? activeClass : inactiveClass}`}
-        title="라이트 모드"
-        aria-label="라이트 모드"
+        title={t.themeLight}
+        aria-label={t.themeLight}
       >
         <span aria-hidden>☀️</span>
       </button>
@@ -67,8 +88,8 @@ function ThemeToggle() {
         type="button"
         onClick={() => setTheme("dark")}
         className={`${btnBase} ${activeTheme === "dark" ? activeClass : inactiveClass}`}
-        title="다크 모드"
-        aria-label="다크 모드"
+        title={t.themeDark}
+        aria-label={t.themeDark}
       >
         <span aria-hidden>🌙</span>
       </button>
@@ -76,10 +97,51 @@ function ThemeToggle() {
         type="button"
         onClick={() => setTheme("system")}
         className={`${btnBase} ${activeTheme === "system" ? activeClass : inactiveClass}`}
-        title="시스템 설정"
-        aria-label="시스템 설정"
+        title={t.themeSystem}
+        aria-label={t.themeSystem}
       >
         <span aria-hidden>💻</span>
+      </button>
+    </div>
+  );
+}
+
+function LanguageToggle() {
+  const { language, setLanguage, t } = useLanguage();
+  const mounted = useIsMounted();
+
+  const activeLanguage = mounted ? language : "ko";
+
+  const btnBase =
+    "flex items-center justify-center rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors";
+  const activeClass = "bg-white font-medium text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100";
+  const inactiveClass = "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200";
+
+  return (
+    <div
+      className="flex items-center rounded-lg border border-slate-200 bg-slate-100/70 p-0.5 dark:border-slate-800 dark:bg-slate-900/80 select-none"
+      role="group"
+      aria-label={t.languageToggle}
+    >
+      <button
+        type="button"
+        onClick={() => setLanguage("ko")}
+        className={`${btnBase} ${activeLanguage === "ko" ? activeClass : inactiveClass}`}
+        title="한국어"
+        aria-label="한국어"
+        aria-pressed={activeLanguage === "ko"}
+      >
+        한
+      </button>
+      <button
+        type="button"
+        onClick={() => setLanguage("en")}
+        className={`${btnBase} ${activeLanguage === "en" ? activeClass : inactiveClass}`}
+        title="English"
+        aria-label="English"
+        aria-pressed={activeLanguage === "en"}
+      >
+        EN
       </button>
     </div>
   );
@@ -98,6 +160,7 @@ export function Toolbar({
   propertiesOpen,
   onToggleProperties,
 }: ToolbarProps) {
+  const { t } = useLanguage();
   return (
     <>
       <LoadingBar loading={busy} label={busyLabel} />
@@ -107,8 +170,8 @@ export function Toolbar({
         type="button"
         onClick={onToggleSidebar}
         aria-pressed={sidebarOpen}
-        aria-label="목록 패널 토글"
-        title="목록 패널 토글"
+        aria-label={t.toggleSidebar}
+        title={t.toggleSidebar}
         className={`shrink-0 rounded-lg p-2 transition-colors ${
           sidebarOpen
             ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
@@ -129,9 +192,9 @@ export function Toolbar({
           {busy ? (
             <span className="flex items-center gap-1.5">
               <Spinner className="h-3.5 w-3.5" />
-              가져오기…
+              {t.importing}
             </span>
-          ) : "가져오기"}
+          ) : t.import}
         </button>
         <button
           type="button"
@@ -142,33 +205,40 @@ export function Toolbar({
           {busy ? (
             <span className="flex items-center gap-1.5">
               <Spinner className="h-3.5 w-3.5" />
-              내보내기…
+              {t.exporting}
             </span>
-          ) : "내보내기"}
+          ) : t.export}
         </button>
 
-        {/* "완료된 할일 보기" — icon+text on ≥sm, checkbox only on mobile */}
-        <label className="ml-1 flex shrink-0 cursor-pointer select-none items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-          <input
-            type="checkbox"
-            checked={showCompleted}
-            onChange={onToggleShowCompleted}
-            className="h-4 w-4 rounded border-slate-300 accent-indigo-600 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-800 cursor-pointer"
-          />
-          {/* text hidden on very small screens */}
-          <span className="hidden sm:inline whitespace-nowrap">완료된 할일 보기</span>
-        </label>
+        {/* "완료된 할일 보기" — icon+text on ≥sm, icon-only on mobile (never
+            a bare unlabeled checkbox — see EyeIcon comment above) */}
+        <button
+          type="button"
+          onClick={onToggleShowCompleted}
+          aria-pressed={showCompleted}
+          aria-label={t.showCompleted}
+          title={t.showCompleted}
+          className={`ml-1 flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs transition-colors ${
+            showCompleted
+              ? "bg-slate-100 font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              : "text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-900"
+          }`}
+        >
+          <EyeIcon off={!showCompleted} />
+          <span className="hidden sm:inline whitespace-nowrap">{t.showCompleted}</span>
+        </button>
       </div>
 
-      {/* Right: theme toggle + properties toggle */}
+      {/* Right: language toggle + theme toggle + properties toggle */}
       <div className="flex shrink-0 items-center gap-1.5">
+        <LanguageToggle />
         <ThemeToggle />
         <button
           type="button"
           onClick={onToggleProperties}
           aria-pressed={propertiesOpen}
-          aria-label="속성 패널 토글"
-          title="속성 패널 토글"
+          aria-label={t.toggleProperties}
+          title={t.toggleProperties}
           className={`rounded-lg p-2 transition-colors ${
             propertiesOpen
               ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"

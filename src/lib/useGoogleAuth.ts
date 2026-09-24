@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/components/LanguageProvider";
 
 const SCRIPT_SRC = "https://accounts.google.com/gsi/client";
 const SCOPE = "https://www.googleapis.com/auth/tasks";
@@ -31,7 +32,7 @@ declare global {
   }
 }
 
-function loadGisScript(): Promise<void> {
+function loadGisScript(errorMessage: string): Promise<void> {
   return new Promise((resolve, reject) => {
     if (window.google?.accounts?.oauth2) {
       resolve();
@@ -40,7 +41,7 @@ function loadGisScript(): Promise<void> {
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${SCRIPT_SRC}"]`);
     if (existing) {
       existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("Google Identity Services 스크립트 로드 실패")));
+      existing.addEventListener("error", () => reject(new Error(errorMessage)));
       return;
     }
     const script = document.createElement("script");
@@ -48,12 +49,13 @@ function loadGisScript(): Promise<void> {
     script.async = true;
     script.defer = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Google Identity Services 스크립트 로드 실패"));
+    script.onerror = () => reject(new Error(errorMessage));
     document.head.appendChild(script);
   });
 }
 
 export function useGoogleAuth() {
+  const { t } = useLanguage();
   const [scriptReady, setScriptReady] = useState(false);
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [expired, setExpired] = useState(false);
@@ -65,7 +67,7 @@ export function useGoogleAuth() {
 
   useEffect(() => {
     let cancelled = false;
-    loadGisScript()
+    loadGisScript(t.scriptLoadFailed)
       .then(() => {
         if (!cancelled) setScriptReady(true);
       })
@@ -75,7 +77,7 @@ export function useGoogleAuth() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!scriptReady || !clientId || !window.google) return;
@@ -84,7 +86,7 @@ export function useGoogleAuth() {
       scope: SCOPE,
       callback: (response: TokenResponse) => {
         if (response.error || !response.access_token) {
-          setAuthError("Google 로그인에 실패했습니다.");
+          setAuthError(t.loginFailed);
           return;
         }
         setAccessToken(response.access_token);
@@ -98,7 +100,7 @@ export function useGoogleAuth() {
         }, response.expires_in * 1000);
       },
     });
-  }, [scriptReady, clientId]);
+  }, [scriptReady, clientId, t]);
 
   useEffect(() => {
     return () => {
@@ -108,12 +110,12 @@ export function useGoogleAuth() {
 
   const signIn = useCallback(() => {
     if (!tokenClientRef.current) {
-      setAuthError("아직 로그인 준비가 되지 않았습니다. 잠시 후 다시 시도해주세요.");
+      setAuthError(t.authNotReady);
       return;
     }
     setAuthError(null);
     tokenClientRef.current.requestAccessToken({ prompt: expired ? "" : "consent" });
-  }, [expired]);
+  }, [expired, t]);
 
   const signOut = useCallback(() => {
     if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);

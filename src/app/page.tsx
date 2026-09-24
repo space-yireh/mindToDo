@@ -50,17 +50,24 @@ export default function Home() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [propertiesOpen, setPropertiesOpen] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
 
   // start collapsed on narrow screens; SSR/first paint assumes desktop
   // (both open) since window isn't available until after mount
   useEffect(() => {
     function applyMobileDefaults() {
-      if (window.matchMedia("(max-width: 767px)").matches) {
+      const mobile = window.matchMedia("(max-width: 767px)").matches;
+      setIsMobile(mobile);
+      if (mobile) {
         setSidebarOpen(false);
         setPropertiesOpen(false);
       }
     }
     applyMobileDefaults();
+    const mq = window.matchMedia("(max-width: 767px)");
+    const listener = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener("change", listener);
+    return () => mq.removeEventListener("change", listener);
   }, []);
 
   const wasSignedInRef = useRef(false);
@@ -368,6 +375,16 @@ export default function Home() {
     [mindMap, selection, commitMindMap],
   );
 
+  // On mobile, auto-open properties bottom sheet when a node is selected
+  const prevSelectionRef = useRef<Selection>(null);
+  useEffect(() => {
+    const prev = prevSelectionRef.current;
+    prevSelectionRef.current = selection;
+    if (isMobile && selection && selection !== prev) {
+      setPropertiesOpen(true);
+    }
+  }, [selection, isMobile]);
+
   if (!auth.accessToken) {
     return (
       <LoginScreen
@@ -380,17 +397,20 @@ export default function Home() {
     );
   }
 
-  const anyPanelOpenOnMobile = sidebarOpen || propertiesOpen;
-
   return (
     <div className="relative flex flex-1 overflow-hidden">
-      {anyPanelOpenOnMobile && (
+      {/* Sidebar backdrop (mobile only) */}
+      {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-slate-900/30 md:hidden"
-          onClick={() => {
-            setSidebarOpen(false);
-            setPropertiesOpen(false);
-          }}
+          className="fixed inset-0 z-30 bg-slate-900/50 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      {/* Bottom-sheet backdrop (mobile only) */}
+      {propertiesOpen && isMobile && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/40 md:hidden"
+          onClick={() => setPropertiesOpen(false)}
         />
       )}
       <Sidebar

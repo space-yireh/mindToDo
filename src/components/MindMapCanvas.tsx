@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -131,10 +131,20 @@ function ZoomControls() {
   );
 }
 
+const emptySubscribe = () => () => {};
+function useIsMobile() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => window.matchMedia("(max-width: 767px)").matches,
+    () => false,
+  );
+}
+
 function MindMapCanvasInner(props: MindMapCanvasProps) {
   const { mindMap, selection, showCompleted } = props;
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editingSeed, setEditingSeed] = useState<string | null>(null);
+  const isMobile = useIsMobile();
 
   const { zoomIn, zoomOut, fitView, setCenter } = useReactFlow();
 
@@ -191,9 +201,9 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
     [mindMap, selection, showCompleted, editingNodeId, editingSeed],
   );
 
-  // Smoothly center on selected node when selection changes
+  // Smoothly center on selected node when selection changes (desktop only)
   useEffect(() => {
-    if (!selection) return;
+    if (!selection || isMobile) return;
     const targetId = selection.depth === 0 ? MINDMAP_ROOT_ID : selection.nodeId;
     const targetNode = nodes.find((n) => n.id === targetId);
     if (targetNode && targetNode.width && targetNode.height) {
@@ -201,15 +211,16 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
       const centerY = targetNode.position.y + targetNode.height / 2;
       setCenter(centerX, centerY, { duration: 300 });
     }
-  }, [selection, nodes, setCenter]);
+  }, [selection, nodes, setCenter, isMobile]);
 
   // Re-fit view when showCompleted changes so layout zoom is optimized for current node count
   useEffect(() => {
+    const maxZoom = isMobile ? 0.7 : 1.0;
     const timer = setTimeout(() => {
-      fitView({ maxZoom: 1.0, duration: 300 });
+      fitView({ maxZoom, duration: 300 });
     }, 50);
     return () => clearTimeout(timer);
-  }, [showCompleted, fitView]);
+  }, [showCompleted, fitView, isMobile]);
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
     // Zoom keyboard shortcuts
@@ -226,7 +237,7 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
       }
       if (e.key === "0") {
         e.preventDefault();
-        fitView({ maxZoom: 1.0, duration: 300 });
+        fitView({ maxZoom: isMobile ? 0.7 : 1.0, duration: 300 });
         return;
       }
     }
@@ -300,7 +311,7 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
         minZoom={0.15}
         maxZoom={2.0}
         fitView
-        fitViewOptions={{ padding: 0.3, maxZoom: 1.0, minZoom: 0.35 }}
+        fitViewOptions={{ padding: 0.3, maxZoom: isMobile ? 0.7 : 1.0, minZoom: 0.15 }}
         proOptions={{ hideAttribution: false }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--bg-dots, #CBD5E1)" />

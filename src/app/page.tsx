@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Canvas } from "@/components/Canvas";
 import { ConfirmModal } from "@/components/ConfirmModal";
+import { MindMapCanvas } from "@/components/MindMapCanvas";
 import { LoginScreen } from "@/components/LoginScreen";
 import { PropertiesPanel } from "@/components/PropertiesPanel";
 import { Sidebar } from "@/components/Sidebar";
@@ -15,6 +15,7 @@ import {
   listTaskLists,
 } from "@/lib/googleTasksApi";
 import { emptyMindMap } from "@/lib/mindmapConvert";
+import { getPostDeleteSelection } from "@/lib/mindmapLayout";
 import { exportMindMap, importMindMap } from "@/lib/sync";
 import {
   addLeafNode,
@@ -49,6 +50,97 @@ export default function Home() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 
   const wasSignedInRef = useRef(false);
+
+  // undo/redo history for local canvas edits only (not import/export).
+  // Kept in refs rather than state since nothing in the UI needs to
+  // re-render off stack length, which also sidesteps async-state timing
+  // issues when undo/redo need to read-then-write synchronously.
+  const undoStackRef = useRef<MindMap[]>([]);
+  const redoStackRef = useRef<MindMap[]>([]);
+  const pendingBaselineRef = useRef<MindMap | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const resetHistory = useCallback(() => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    pendingBaselineRef.current = null;
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+  }, []);
+
+  const flushHistory = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (pendingBaselineRef.current) {
+      undoStackRef.current = [...undoStackRef.current, pendingBaselineRef.current];
+      pendingBaselineRef.current = null;
+    }
+  }, []);
+
+  // commit a local mindmap edit as one undo step. `immediate` flushes right
+  // away (discrete actions like add/delete/toggle); omitted, it debounces
+  // so a burst of keystrokes in a text field collapses into one undo step.
+  const commitMindMap = useCallback(
+    (next: MindMap, opts?: { immediate?: boolean }) => {
+      if (!mindMap) return;
+      if (pendingBaselineRef.current === null) {
+        pendingBaselineRef.current = mindMap;
+      }
+      redoStackRef.current = [];
+      setMindMap(next);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      if (opts?.immediate) {
+        flushHistory();
+      } else {
+        debounceTimerRef.current = setTimeout(flushHistory, 600);
+      }
+    },
+    [mindMap, flushHistory],
+  );
+
+  const handleUndo = useCallback(() => {
+    flushHistory();
+    if (undoStackRef.current.length === 0 || !mindMap) return;
+    const prev = undoStackRef.current[undoStackRef.current.length - 1];
+    undoStackRef.current = undoStackRef.current.slice(0, -1);
+    redoStackRef.current = [...redoStackRef.current, mindMap];
+    setMindMap(prev);
+    setSelection(null);
+  }, [flushHistory, mindMap]);
+
+  const handleRedo = useCallback(() => {
+    flushHistory();
+    if (redoStackRef.current.length === 0 || !mindMap) return;
+    const next = redoStackRef.current[redoStackRef.current.length - 1];
+    redoStackRef.current = redoStackRef.current.slice(0, -1);
+    undoStackRef.current = [...undoStackRef.current, mindMap];
+    setMindMap(next);
+    setSelection(null);
+  }, [flushHistory, mindMap]);
+
+  // global undo/redo shortcut. Skipped while focus is in a text field so
+  // the browser's own field-level undo (editing text) takes priority.
+  useEffect(() => {
+    function handleGlobalKeyDown(e: KeyboardEvent) {
+      const isMeta = e.ctrlKey || e.metaKey;
+      const key = e.key.toLowerCase();
+      if (!isMeta || (key !== "z" && key !== "y")) return;
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
+      e.preventDefault();
+      if (key === "y" || (key === "z" && e.shiftKey)) {
+        handleRedo();
+      } else {
+        handleUndo();
+      }
+    }
+    window.addEventListener("keydown", handleGlobalKeyDown);
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown);
+  }, [handleUndo, handleRedo]);
 
   const handleApiError = useCallback(
     (err: unknown, fallbackMessage: string) => {
@@ -108,6 +200,7 @@ export default function Home() {
         setOriginalTitle(imported.title);
         setSelectedTaskListId(taskListId);
         setSelection(null);
+        resetHistory();
         showToast("가져오기 완료", "success");
       } catch (err) {
         handleApiError(err, "가져오기 실패");
@@ -115,7 +208,7 @@ export default function Home() {
         setBusy(false);
       }
     },
-    [auth.accessToken, handleApiError, showToast],
+    [auth.accessToken, handleApiError, showToast, resetHistory],
   );
 
   const handleSelectTaskList = useCallback(
@@ -137,13 +230,14 @@ export default function Home() {
       setMindMap(emptyMindMap(created.id, created.title));
       setOriginalTitle(created.title);
       setSelection(null);
+      resetHistory();
       showToast("새 목록을 만들었습니다", "success");
     } catch (err) {
       handleApiError(err, "목록 생성 실패");
     } finally {
       setBusy(false);
     }
-  }, [auth.accessToken, busy, handleApiError, showToast]);
+  }, [auth.accessToken, busy, handleApiError, showToast, resetHistory]);
 
   const handleDeleteTaskList = useCallback(
     (taskListId: string) => {
@@ -163,6 +257,7 @@ export default function Home() {
               setSelectedTaskListId(null);
               setMindMap(null);
               setSelection(null);
+              resetHistory();
             }
             showToast("목록을 삭제했습니다", "success");
           } catch (err) {
@@ -173,7 +268,7 @@ export default function Home() {
         },
       });
     },
-    [auth.accessToken, handleApiError, selectedTaskListId, showToast, taskLists],
+    [auth.accessToken, handleApiError, selectedTaskListId, showToast, taskLists, resetHistory],
   );
 
   const handleImportClick = useCallback(() => {
@@ -217,7 +312,47 @@ export default function Home() {
     });
   }, [auth.accessToken, handleApiError, mindMap, originalTitle, showToast]);
 
+  // Cmd/Ctrl+S -> export, Cmd/Ctrl+R -> import. Both just open the same
+  // confirm modal the toolbar buttons do (never skip it) since both these
+  // keys are often pressed out of habit (save / reload) and both actions
+  // overwrite one side with the other.
+  useEffect(() => {
+    function handleSaveOrImportShortcut(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key === "s") {
+        e.preventDefault();
+        handleExportClick();
+      } else if (key === "r") {
+        e.preventDefault();
+        handleImportClick();
+      }
+    }
+    window.addEventListener("keydown", handleSaveOrImportShortcut);
+    return () => window.removeEventListener("keydown", handleSaveOrImportShortcut);
+  }, [handleExportClick, handleImportClick]);
+
   const selectedNode = mindMap ? findSelectedNode(mindMap, selection) : null;
+
+  const handleRootTitleChange = useCallback(
+    (title: string) => {
+      if (!mindMap) return;
+      commitMindMap({ ...mindMap, title });
+    },
+    [mindMap, commitMindMap],
+  );
+
+  const handleSelectedTitleChange = useCallback(
+    (title: string) => {
+      if (!mindMap || !selection || selection.depth === 0) return;
+      const next =
+        selection.depth === 1
+          ? updateTaskNode(mindMap, selection.nodeId, { title })
+          : updateLeafNode(mindMap, selection.parentId, selection.nodeId, { title });
+      commitMindMap(next);
+    },
+    [mindMap, selection, commitMindMap],
+  );
 
   if (!auth.accessToken) {
     return (
@@ -252,64 +387,75 @@ export default function Home() {
             disabled={busy}
           />
           <div className="flex flex-1 overflow-hidden">
-            <Canvas
+            <MindMapCanvas
               mindMap={mindMap}
               selection={selection}
               showCompleted={showCompleted}
               onSelectRoot={() => setSelection({ depth: 0 })}
               onSelectTaskNode={(nodeId) => setSelection({ depth: 1, nodeId })}
               onSelectLeafNode={(nodeId, parentId) => setSelection({ depth: 2, nodeId, parentId })}
-              onAddTaskNode={() => setMindMap((prev) => (prev ? addTaskNode(prev) : prev))}
-              onAddLeafNode={(parentId) =>
-                setMindMap((prev) => (prev ? addLeafNode(prev, parentId) : prev))
-              }
+              onAddTaskNode={() => {
+                if (!mindMap) return "";
+                const { mindMap: next, nodeId } = addTaskNode(mindMap);
+                commitMindMap(next, { immediate: true });
+                setSelection({ depth: 1, nodeId });
+                return nodeId;
+              }}
+              onAddLeafNode={(parentId) => {
+                if (!mindMap) return "";
+                const { mindMap: next, nodeId } = addLeafNode(mindMap, parentId);
+                commitMindMap(next, { immediate: true });
+                setSelection({ depth: 2, nodeId, parentId });
+                return nodeId;
+              }}
               onDeleteTaskNode={(nodeId) => {
-                setMindMap((prev) => (prev ? removeTaskNode(prev, nodeId) : prev));
-                setSelection((prev) => (prev?.depth === 1 && prev.nodeId === nodeId ? null : prev));
+                if (!mindMap) return;
+                if (selection?.depth === 1 && selection.nodeId === nodeId) {
+                  setSelection(getPostDeleteSelection(mindMap, selection));
+                }
+                commitMindMap(removeTaskNode(mindMap, nodeId), { immediate: true });
               }}
               onDeleteLeafNode={(parentId, nodeId) => {
-                setMindMap((prev) => (prev ? removeLeafNode(prev, parentId, nodeId) : prev));
-                setSelection((prev) => (prev?.depth === 2 && prev.nodeId === nodeId ? null : prev));
+                if (!mindMap) return;
+                if (selection?.depth === 2 && selection.nodeId === nodeId) {
+                  setSelection(getPostDeleteSelection(mindMap, selection));
+                }
+                commitMindMap(removeLeafNode(mindMap, parentId, nodeId), { immediate: true });
               }}
+              onRootTitleChange={handleRootTitleChange}
+              onTitleChange={handleSelectedTitleChange}
             />
             <PropertiesPanel
               selection={selection}
               rootTitle={mindMap.title}
-              onRootTitleChange={(title) => setMindMap((prev) => (prev ? { ...prev, title } : prev))}
+              onRootTitleChange={handleRootTitleChange}
               selectedNode={selectedNode}
-              onTitleChange={(title) =>
-                setMindMap((prev) => {
-                  if (!prev || !selection || selection.depth === 0) return prev;
-                  return selection.depth === 1
-                    ? updateTaskNode(prev, selection.nodeId, { title })
-                    : updateLeafNode(prev, selection.parentId, selection.nodeId, { title });
-                })
-              }
-              onNotesChange={(notes) =>
-                setMindMap((prev) => {
-                  if (!prev || !selection || selection.depth === 0) return prev;
-                  return selection.depth === 1
-                    ? updateTaskNode(prev, selection.nodeId, { notes })
-                    : updateLeafNode(prev, selection.parentId, selection.nodeId, { notes });
-                })
-              }
-              onDueChange={(due) =>
-                setMindMap((prev) => {
-                  if (!prev || !selection || selection.depth === 0) return prev;
-                  return selection.depth === 1
-                    ? updateTaskNode(prev, selection.nodeId, { due })
-                    : updateLeafNode(prev, selection.parentId, selection.nodeId, { due });
-                })
-              }
-              onStatusChange={(completed) =>
-                setMindMap((prev) => {
-                  if (!prev || !selection || selection.depth === 0) return prev;
-                  const status = completed ? "completed" : "needsAction";
-                  return selection.depth === 1
-                    ? updateTaskNode(prev, selection.nodeId, { status })
-                    : updateLeafNode(prev, selection.parentId, selection.nodeId, { status });
-                })
-              }
+              onTitleChange={handleSelectedTitleChange}
+              onNotesChange={(notes) => {
+                if (!mindMap || !selection || selection.depth === 0) return;
+                const next =
+                  selection.depth === 1
+                    ? updateTaskNode(mindMap, selection.nodeId, { notes })
+                    : updateLeafNode(mindMap, selection.parentId, selection.nodeId, { notes });
+                commitMindMap(next);
+              }}
+              onDueChange={(due) => {
+                if (!mindMap || !selection || selection.depth === 0) return;
+                const next =
+                  selection.depth === 1
+                    ? updateTaskNode(mindMap, selection.nodeId, { due })
+                    : updateLeafNode(mindMap, selection.parentId, selection.nodeId, { due });
+                commitMindMap(next, { immediate: true });
+              }}
+              onStatusChange={(completed) => {
+                if (!mindMap || !selection || selection.depth === 0) return;
+                const status = completed ? "completed" : "needsAction";
+                const next =
+                  selection.depth === 1
+                    ? updateTaskNode(mindMap, selection.nodeId, { status })
+                    : updateLeafNode(mindMap, selection.parentId, selection.nodeId, { status });
+                commitMindMap(next, { immediate: true });
+              }}
             />
           </div>
         </div>

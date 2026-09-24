@@ -54,6 +54,10 @@ export function Sidebar({
     >
       {/* Brand */}
       <div className="flex items-center gap-2 border-b border-slate-100 p-4 dark:border-slate-800">
+        {/* eslint-disable-next-line @next/next/no-img-element -- tiny static
+            SVG mark; next/image needs dangerouslyAllowSVG for .svg sources,
+            not worth the config change for one decorative 28px icon */}
+        <img src="/logo.svg" alt="" className="h-7 w-7 shrink-0" />
         <span className="text-lg font-bold tracking-tight text-indigo-600 dark:text-indigo-400">MindToDo</span>
       </div>
 

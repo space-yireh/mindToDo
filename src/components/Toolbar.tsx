@@ -1,6 +1,16 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { useTheme } from "@/components/ThemeProvider";
+
+const emptySubscribe = () => () => {};
+function useIsMounted() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  );
+}
 
 interface ToolbarProps {
   onImportClick: () => void;
@@ -29,6 +39,9 @@ export function PanelIcon({ side }: { side: "left" | "right" }) {
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const mounted = useIsMounted();
+
+  const activeTheme = mounted ? theme : "system";
 
   return (
     <div className="flex items-center rounded-lg border border-slate-200 bg-slate-100/70 p-0.5 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-400 select-none">
@@ -36,7 +49,7 @@ function ThemeToggle() {
         type="button"
         onClick={() => setTheme("light")}
         className={`flex items-center gap-1 rounded-md px-2 py-1 transition-colors ${
-          theme === "light"
+          activeTheme === "light"
             ? "bg-white font-medium text-slate-900 shadow-xs dark:bg-slate-800 dark:text-slate-100"
             : "hover:text-slate-900 dark:hover:text-slate-200"
         }`}
@@ -49,7 +62,7 @@ function ThemeToggle() {
         type="button"
         onClick={() => setTheme("dark")}
         className={`flex items-center gap-1 rounded-md px-2 py-1 transition-colors ${
-          theme === "dark"
+          activeTheme === "dark"
             ? "bg-white font-medium text-slate-900 shadow-xs dark:bg-slate-800 dark:text-slate-100"
             : "hover:text-slate-900 dark:hover:text-slate-200"
         }`}
@@ -62,7 +75,7 @@ function ThemeToggle() {
         type="button"
         onClick={() => setTheme("system")}
         className={`flex items-center gap-1 rounded-md px-2 py-1 transition-colors ${
-          theme === "system"
+          activeTheme === "system"
             ? "bg-white font-medium text-slate-900 shadow-xs dark:bg-slate-800 dark:text-slate-100"
             : "hover:text-slate-900 dark:hover:text-slate-200"
         }`}
@@ -120,12 +133,12 @@ export function Toolbar({
         >
           내보내기
         </button>
-        <label className="ml-2 flex select-none items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+        <label className="ml-2 flex select-none items-center gap-2 text-sm text-slate-600 dark:text-slate-400 cursor-pointer">
           <input
             type="checkbox"
             checked={showCompleted}
             onChange={onToggleShowCompleted}
-            className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-900"
+            className="h-4 w-4 rounded border-slate-300 text-indigo-600 accent-indigo-600 focus:ring-indigo-400 dark:border-slate-700 dark:bg-slate-800 dark:accent-indigo-500 cursor-pointer"
           />
           완료된 할일 보기
         </label>

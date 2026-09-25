@@ -6,7 +6,8 @@ import { MindMapCanvas } from "@/components/MindMapCanvas";
 import { LoginScreen } from "@/components/LoginScreen";
 import { PropertiesPanel } from "@/components/PropertiesPanel";
 import { Sidebar } from "@/components/Sidebar";
-import { PanelIcon, Toolbar } from "@/components/Toolbar";
+import { SidebarToggle } from "@/components/SidebarToggle";
+import { Toolbar } from "@/components/Toolbar";
 import { useToast } from "@/components/ToastProvider";
 import { useLanguage } from "@/components/LanguageProvider";
 import {
@@ -22,8 +23,12 @@ import {
   addLeafNode,
   addTaskNode,
   findSelectedNode,
+  moveLeafNode,
+  moveTaskNode,
+  promoteLeafToTask,
   removeLeafNode,
   removeTaskNode,
+  reparentLeafToTask,
   updateLeafNode,
   updateTaskNode,
 } from "@/lib/treeOps";
@@ -443,6 +448,40 @@ export default function Home() {
     [mindMap, selection, commitMindMap],
   );
 
+  // Ctrl/Cmd+Up/Down: swap the selected node with its previous/next sibling
+  const handleMoveTaskNode = useCallback(
+    (nodeId: string, direction: "up" | "down") => {
+      if (!mindMap) return;
+      commitMindMap(moveTaskNode(mindMap, nodeId, direction), { immediate: true });
+    },
+    [mindMap, commitMindMap],
+  );
+
+  const handleMoveLeafNode = useCallback(
+    (parentId: string, nodeId: string, direction: "up" | "down") => {
+      if (!mindMap) return;
+      commitMindMap(moveLeafNode(mindMap, parentId, nodeId, direction), { immediate: true });
+    },
+    [mindMap, commitMindMap],
+  );
+
+  // drag-and-drop reparenting: a leaf dropped on a different task moves
+  // under it (still depth 2); dropped on root, it's promoted to a task
+  // (depth 1). Selection follows the moved node either way.
+  const handleReparentLeaf = useCallback(
+    (leafId: string, fromParentId: string, targetId: string, targetKind: "root" | "task") => {
+      if (!mindMap) return;
+      const next =
+        targetKind === "root"
+          ? promoteLeafToTask(mindMap, leafId, fromParentId)
+          : reparentLeafToTask(mindMap, leafId, fromParentId, targetId);
+      if (next === mindMap) return;
+      commitMindMap(next, { immediate: true });
+      setSelection(targetKind === "root" ? { depth: 1, nodeId: leafId } : { depth: 2, nodeId: leafId, parentId: targetId });
+    },
+    [mindMap, commitMindMap],
+  );
+
   // depth-aware add/delete for the properties panel's own buttons (mobile)
   const propertiesOnAddChild = !selection
     ? undefined
@@ -521,6 +560,9 @@ export default function Home() {
             busyLabel={busyLabel}
             sidebarOpen={sidebarOpen}
             onToggleSidebar={() => setSidebarOpen((v) => !v)}
+            taskLists={taskLists}
+            selectedTaskListId={selectedTaskListId}
+            onSelectTaskList={handleSelectTaskList}
             propertiesOpen={propertiesOpen}
             onToggleProperties={() => setPropertiesOpen((v) => !v)}
           />
@@ -538,6 +580,9 @@ export default function Home() {
               onDeleteLeafNode={handleDeleteLeafNode}
               onRootTitleChange={handleRootTitleChange}
               onTitleChange={handleSelectedTitleChange}
+              onMoveTaskNode={handleMoveTaskNode}
+              onMoveLeafNode={handleMoveLeafNode}
+              onReparentLeaf={handleReparentLeaf}
             />
             <PropertiesPanel
               selection={selection}
@@ -579,15 +624,19 @@ export default function Home() {
         </div>
       ) : (
         <div className="flex flex-1 flex-col overflow-hidden">
-          <div className="flex items-center border-b border-slate-200 bg-white px-3 py-3 md:hidden">
-            <button
-              type="button"
-              onClick={() => setSidebarOpen((v) => !v)}
-              aria-label={t.toggleSidebar}
-              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100"
-            >
-              <PanelIcon side="left" />
-            </button>
+          {/* Not md:hidden — unlike the Toolbar's own toggle, this is the
+              only sidebar-reopen affordance in this branch (no mindMap
+              selected), so it must stay reachable on desktop too. Without
+              it, collapsing the sidebar and then losing the active list
+              (e.g. deleting it) left desktop users with no way back in. */}
+          <div className="flex items-center border-b border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-950">
+            <SidebarToggle
+              sidebarOpen={sidebarOpen}
+              onToggleSidebar={() => setSidebarOpen((v) => !v)}
+              taskLists={taskLists}
+              selectedTaskListId={selectedTaskListId}
+              onSelectTaskList={handleSelectTaskList}
+            />
           </div>
           <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
             {taskLists.length === 0 ? t.emptyStateHintNoLists : t.emptyStateHint}

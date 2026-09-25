@@ -13,6 +13,12 @@ const KIND_STYLES: Record<MindMapNodeKind, string> = {
 };
 
 const SELECTED_RING = "ring-2 ring-offset-2 ring-offset-slate-50 ring-amber-400 dark:ring-offset-slate-900";
+// subtle outline on every eligible drop target as soon as a leaf drag
+// starts (so users can see where they *can* drop before hovering there),
+// upgraded to a stronger ring on whichever one is actually under the pointer
+const DROP_TARGET_RING = "ring-2 ring-offset-2 ring-offset-slate-50 ring-emerald-300/60 dark:ring-offset-slate-900";
+const DROP_TARGET_HOVER_RING =
+  "ring-2 ring-offset-2 ring-offset-slate-50 ring-emerald-500 dark:ring-offset-slate-900";
 
 function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
   const { t } = useLanguage();
@@ -31,6 +37,15 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
     onStartEdit,
     onCommitEdit,
     onCancelEdit,
+    draggable,
+    isDragging,
+    isDropTarget,
+    isDropHighlighted,
+    onDragStart,
+    onDragOverNode,
+    onDragLeaveNode,
+    onDropNode,
+    onDragEndNode,
   } = data;
   const size = NODE_SIZE[kind];
   const isCompleted = status === "completed";
@@ -121,11 +136,51 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
             e.stopPropagation();
             onStartEdit();
           }}
+          draggable={draggable}
+          onDragStart={(e) => {
+            e.stopPropagation();
+            e.dataTransfer.effectAllowed = "move";
+            onDragStart?.();
+          }}
+          onDragOver={
+            isDropTarget
+              ? (e) => {
+                  // dragover must be prevented for the browser to treat this
+                  // element as a valid drop target at all
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDragOverNode?.();
+                }
+              : undefined
+          }
+          onDragLeave={isDropTarget ? () => onDragLeaveNode?.() : undefined}
+          onDrop={
+            isDropTarget
+              ? (e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDropNode?.();
+                }
+              : undefined
+          }
+          onDragEnd={draggable ? () => onDragEndNode?.() : undefined}
           className={[
             "flex h-full w-full items-center justify-center rounded-xl border px-3 text-center leading-snug shadow-md transition",
             KIND_STYLES[kind],
             selected ? SELECTED_RING : "",
+            isDropTarget ? (isDropHighlighted ? DROP_TARGET_HOVER_RING : DROP_TARGET_RING) : "",
             isCompleted ? "opacity-50" : "",
+            isDragging ? "opacity-40" : "",
+            // React Flow's own pan gesture starts on mousedown anywhere in
+            // the pane, including inside node content — competing with the
+            // browser's native drag-and-drop gesture recognition on this
+            // same element and winning, so a real mouse drag panned the
+            // canvas instead of picking up the leaf. `nopan` (React Flow's
+            // own escape hatch for exactly this) tells its pan handler to
+            // ignore mousedown events starting here, leaving native drag
+            // initiation uncontested. Only matters for draggable (leaf)
+            // nodes; harmless either way since it doesn't affect clicks.
+            draggable ? "nopan" : "",
           ].join(" ")}
         >
           <span className={isCompleted ? "line-through" : ""}>{title || t.untitled}</span>

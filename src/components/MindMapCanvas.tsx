@@ -37,6 +37,10 @@ interface MindMapCanvasProps {
   onDeleteLeafNode: (parentId: string, nodeId: string) => void;
   onRootTitleChange: (title: string) => void;
   onTitleChange: (title: string) => void;
+  onMoveTaskNode: (nodeId: string, direction: "up" | "down") => void;
+  onMoveLeafNode: (parentId: string, nodeId: string, direction: "up" | "down") => void;
+  /** targetKind "root" promotes the leaf to a top-level task */
+  onReparentLeaf: (leafId: string, fromParentId: string, targetId: string, targetKind: "root" | "task") => void;
 }
 
 const ARROW_DIRECTIONS: Record<string, NavigationDirection> = {
@@ -147,6 +151,8 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
   const { mindMap, selection, showCompleted } = props;
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
   const [editingSeed, setEditingSeed] = useState<string | null>(null);
+  const [draggingLeaf, setDraggingLeaf] = useState<{ nodeId: string; parentId: string } | null>(null);
+  const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const { t } = useLanguage();
 
@@ -175,6 +181,14 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
     return newId;
   }
 
+  function handleNodeDrop(targetNodeId: string) {
+    if (!draggingLeaf) return;
+    const targetKind = targetNodeId === MINDMAP_ROOT_ID ? "root" : "task";
+    props.onReparentLeaf(draggingLeaf.nodeId, draggingLeaf.parentId, targetNodeId, targetKind);
+    setDraggingLeaf(null);
+    setDropTargetId(null);
+  }
+
   const { nodes, edges } = useMemo(
     () =>
       computeMindMapLayout({
@@ -201,9 +215,20 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
           stopEdit();
         },
         onCancelEdit: stopEdit,
+        draggingLeafId: draggingLeaf?.nodeId ?? null,
+        draggingLeafParentId: draggingLeaf?.parentId ?? null,
+        dropTargetId,
+        onLeafDragStart: (nodeId, parentId) => setDraggingLeaf({ nodeId, parentId }),
+        onNodeDragOver: (nodeId) => setDropTargetId(nodeId),
+        onNodeDragLeave: () => setDropTargetId(null),
+        onNodeDrop: handleNodeDrop,
+        onDragEnd: () => {
+          setDraggingLeaf(null);
+          setDropTargetId(null);
+        },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mindMap, selection, showCompleted, editingNodeId, editingSeed],
+    [mindMap, selection, showCompleted, editingNodeId, editingSeed, draggingLeaf, dropTargetId],
   );
 
   // Smoothly center on selected node when selection changes. On mobile the
@@ -263,6 +288,15 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
       if (e.key === "1") {
         e.preventDefault();
         zoomTo(1, { duration: 200 });
+        return;
+      }
+      // reorder the selected node among its siblings — distinct from plain
+      // ArrowUp/Down below, which navigate selection instead of moving it
+      if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !editingNodeId && selection) {
+        e.preventDefault();
+        const dir = e.key === "ArrowUp" ? "up" : "down";
+        if (selection.depth === 1) props.onMoveTaskNode(selection.nodeId, dir);
+        else if (selection.depth === 2) props.onMoveLeafNode(selection.parentId, selection.nodeId, dir);
         return;
       }
     }

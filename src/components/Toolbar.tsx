@@ -2,8 +2,10 @@
 
 import { useSyncExternalStore } from "react";
 import { LoadingBar, Spinner } from "@/components/LoadingBar";
+import { SidebarToggle } from "@/components/SidebarToggle";
 import { useTheme } from "@/components/ThemeProvider";
 import { useLanguage } from "@/components/LanguageProvider";
+import type { TaskList } from "@/lib/types";
 
 const emptySubscribe = () => () => {};
 function useIsMounted() {
@@ -24,6 +26,9 @@ interface ToolbarProps {
   busyLabel?: string;
   sidebarOpen: boolean;
   onToggleSidebar: () => void;
+  taskLists: TaskList[];
+  selectedTaskListId: string | null;
+  onSelectTaskList: (taskListId: string) => void;
   propertiesOpen: boolean;
   onToggleProperties: () => void;
 }
@@ -157,6 +162,9 @@ export function Toolbar({
   busyLabel,
   sidebarOpen,
   onToggleSidebar,
+  taskLists,
+  selectedTaskListId,
+  onSelectTaskList,
   propertiesOpen,
   onToggleProperties,
 }: ToolbarProps) {
@@ -165,21 +173,14 @@ export function Toolbar({
     <>
       <LoadingBar loading={busy} label={busyLabel} />
     <div className="flex items-center gap-1.5 border-b border-slate-200 bg-white px-2 py-2 dark:border-slate-800 dark:bg-slate-950 min-h-[48px]">
-      {/* Left: sidebar toggle */}
-      <button
-        type="button"
-        onClick={onToggleSidebar}
-        aria-pressed={sidebarOpen}
-        aria-label={t.toggleSidebar}
-        title={t.toggleSidebar}
-        className={`shrink-0 rounded-lg p-2 transition-colors ${
-          sidebarOpen
-            ? "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-            : "text-slate-400 hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-900 dark:hover:text-slate-300"
-        }`}
-      >
-        <PanelIcon side="left" />
-      </button>
+      {/* Left: sidebar toggle (+ hover popover to quick-switch lists while collapsed) */}
+      <SidebarToggle
+        sidebarOpen={sidebarOpen}
+        onToggleSidebar={onToggleSidebar}
+        taskLists={taskLists}
+        selectedTaskListId={selectedTaskListId}
+        onSelectTaskList={onSelectTaskList}
+      />
 
       {/* Center: import / export / show-completed. Scrolls horizontally
           instead of clipping — on narrow screens the fixed-width buttons

@@ -24,6 +24,19 @@ export interface MindMapNodeData {
   onStartEdit: () => void;
   onCommitEdit: (title: string) => void;
   onCancelEdit: () => void;
+  /** true only for depth-2 leaves — the only draggable kind (see reparenting) */
+  draggable: boolean;
+  /** true while this specific leaf is the one currently being dragged */
+  isDragging: boolean;
+  /** true while a leaf is being dragged and this node is a valid drop target for it */
+  isDropTarget: boolean;
+  /** true when this node is the drop target currently under the pointer */
+  isDropHighlighted: boolean;
+  onDragStart?: () => void;
+  onDragOverNode?: () => void;
+  onDragLeaveNode?: () => void;
+  onDropNode?: () => void;
+  onDragEndNode?: () => void;
   [key: string]: unknown;
 }
 
@@ -73,6 +86,17 @@ interface ComputeLayoutOptions {
   onStartEdit: (nodeId: string) => void;
   onCommitEdit: (title: string) => void;
   onCancelEdit: () => void;
+  /** id of the leaf currently being dragged, if any (drag-and-drop reparenting) */
+  draggingLeafId?: string | null;
+  /** that leaf's current parent task id — its own task is not a valid drop target */
+  draggingLeafParentId?: string | null;
+  /** id of the node currently under the pointer during a drag, for highlighting */
+  dropTargetId?: string | null;
+  onLeafDragStart?: (nodeId: string, parentId: string) => void;
+  onNodeDragOver?: (nodeId: string) => void;
+  onNodeDragLeave?: () => void;
+  onNodeDrop?: (nodeId: string) => void;
+  onDragEnd?: () => void;
 }
 
 export function computeMindMapLayout(options: ComputeLayoutOptions): {
@@ -96,6 +120,14 @@ export function computeMindMapLayout(options: ComputeLayoutOptions): {
     onStartEdit,
     onCommitEdit,
     onCancelEdit,
+    draggingLeafId = null,
+    draggingLeafParentId = null,
+    dropTargetId = null,
+    onLeafDragStart,
+    onNodeDragOver,
+    onNodeDragLeave,
+    onNodeDrop,
+    onDragEnd,
   } = options;
 
   const visibleTaskNodes = mindMap.nodes.filter((n) => showCompleted || n.status !== "completed");
@@ -168,6 +200,14 @@ export function computeMindMapLayout(options: ComputeLayoutOptions): {
       onDelete = () => onDeleteLeafNode(parentId, d.data.id);
     }
 
+    // drag-and-drop reparenting: only leaves are draggable, and only
+    // root/task nodes are valid drop targets (never a leaf's own current
+    // task, and never another leaf — depth is capped at 2)
+    const draggable = kind === "leaf";
+    const isDropTarget =
+      Boolean(draggingLeafId) &&
+      (kind === "root" || (kind === "task" && d.data.id !== draggingLeafParentId));
+
     nodes.push({
       id: d.data.id,
       type: kind,
@@ -194,6 +234,15 @@ export function computeMindMapLayout(options: ComputeLayoutOptions): {
         onStartEdit: () => onStartEdit(d.data.id),
         onCommitEdit,
         onCancelEdit,
+        draggable,
+        isDragging: draggable && d.data.id === draggingLeafId,
+        isDropTarget,
+        isDropHighlighted: isDropTarget && dropTargetId === d.data.id,
+        onDragStart: draggable ? () => onLeafDragStart?.(d.data.id, d.data.parentId as string) : undefined,
+        onDragOverNode: isDropTarget ? () => onNodeDragOver?.(d.data.id) : undefined,
+        onDragLeaveNode: isDropTarget ? () => onNodeDragLeave?.() : undefined,
+        onDropNode: isDropTarget ? () => onNodeDrop?.(d.data.id) : undefined,
+        onDragEndNode: draggable ? () => onDragEnd?.() : undefined,
       },
     });
 

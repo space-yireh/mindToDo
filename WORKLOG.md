@@ -350,7 +350,118 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
     sent to a server) rather than publish a factually wrong privacy policy
     — this mattered enough to flag explicitly since Google's OAuth
     verification review will read this exact page.
-18. **i18n (Korean + English)** — a lightweight custom system, not a framework (`next-intl`/`react-i18next` were considered and rejected as overkill for this app's scale). `src/lib/i18n.ts` holds two flat dictionary objects (`ko`, `en`) typed against each other (`en: typeof ko`, so TS enforces both stay in sync — no runtime key-lookup, no missing-translation risk); `src/components/LanguageProvider.tsx` is a Context provider (`localStorage` under `mindtodo_language`, `useLanguage()` hook returning `{ language, setLanguage, t }` where `t` is the whole resolved dictionary object — call sites read `t.someKey`, not `t('someKey')`). **Note**: it originally read `localStorage` synchronously in its `useState` initializer, matching `ThemeProvider.tsx`'s pattern at the time — entry #16 changed that (SSR hydration mismatch), so the two providers' initialization no longer match; see #16 before assuming they're identical. A `한`/`EN` segmented-control toggle sits in the toolbar next to the theme toggle. **Scope: UI chrome only** — buttons, labels, toasts, confirm-modal text, aria-labels, and the *default* title given to a newly created list/task/subtask (`t.newList`/`t.newTaskDefault`/`t.newSubtaskDefault`, threaded through `addTaskNode`/`addLeafNode`/`makeTaskNode`/`makeLeafNode` as an optional `title` param). **Never translated: user-entered content** — existing task/list titles, notes, dates are exactly what the user typed, in whatever language that is; this app is not a translation tool. `useGoogleAuth.ts` also pulls `useLanguage()` for its own error strings, since it's a hook (not just components) and hooks can call other hooks freely. One gotcha: several `useCallback` dependency arrays initially listed individual `t.xxx` keys, which is unnecessary (fixed to depend on the whole `t` object instead) and tripped `react-hooks/exhaustive-deps` on a member-expression call site (`t.deleteListMessage(...)`) — just depend on `t` itself everywhere, since it's one atomic object swap per language change anyway.
+18. **Sibling reordering, drag-and-drop reparenting, collapsed-sidebar quick
+    switch** (2026-09-25) — three UX requests from actual use:
+    - **`Ctrl/Cmd+↑/↓` reorders the selected node among its siblings**
+      (swaps array position with the previous/next sibling — order in
+      `MindMap.nodes`/`TaskNode.children` *is* the display/export order,
+      no separate order field). New `treeOps.ts` functions `moveTaskNode`/
+      `moveLeafNode`. Distinct from plain `↑/↓`, which already navigated
+      selection between siblings (`getNavigationTarget`) — the ctrl-check
+      had to be added as its own branch inside `MindMapCanvas.tsx`'s
+      existing `if (e.ctrlKey || e.metaKey)` zoom-shortcut block, *before*
+      falling through to the plain-arrow-key switch below, otherwise
+      Ctrl+↑ was indistinguishable from bare ↑ (navigated instead of
+      reordering).
+    - **Drag-and-drop reparenting for leaves (depth 2 only)**: drag a leaf
+      onto a *different* task to move it there (still depth 2), or onto
+      the root to promote it to a top-level task (depth 1). Dragging onto
+      its own current parent is explicitly excluded (no-op). Deliberately
+      not implemented: dragging a task to become a leaf (demotion) — user
+      confirmed this isn't needed. Built on the native HTML5 Drag and Drop
+      API (`draggable`, `dragstart`/`dragover`/`drop`/`dragend`) on the
+      node's own `<button>` in `MindMapNodeBox.tsx`, *not* React Flow's
+      own `nodesDraggable` (left `false`, as before — that's for freely
+      repositioning nodes, which this fixed-auto-layout tree never allows;
+      the two systems are unrelated and don't conflict). Drag state
+      (`draggingLeaf`, `dropTargetId`) lives in `MindMapCanvasInner` and
+      flows into every node via new `computeMindMapLayout` per-node data
+      (`draggable`, `isDragging`, `isDropTarget`, `isDropHighlighted` +
+      matching callbacks) — same threading pattern the existing
+      `onSelect`/`onAddChild`/`onDelete` closures already use. New
+      `treeOps.ts` functions `reparentLeafToTask`/`promoteLeafToTask`.
+      Visual feedback: every eligible drop target gets a subtle emerald
+      ring the instant a drag starts (so users see *where* they can drop
+      before hovering anywhere), upgraded to a solid ring on whichever one
+      is actually under the pointer; the dragged leaf itself dims to 40%
+      opacity. Desktop-only by design (native HTML5 DnD doesn't fire from
+      touch gestures at all) — same precedent as Tab/Enter/F2 keyboard
+      shortcuts already being desktop-only, mobile already has its own
+      equivalent affordances elsewhere.
+      **Testing gotcha**: dispatching `dragstart`→`dragover`→`drop`
+      synchronously in one `page.evaluate()` call fails — React needs an
+      actual render tick between `dragstart` (which calls `setDraggingLeaf`)
+      and `dragover` (whose handler only exists on the target once
+      `isDropTarget` recomputes from that state), so `dragover`'s
+      `preventDefault()` never fires and the browser never treats it as a
+      valid drop target. Real mouse-drag input naturally has this gap
+      (moving the pointer takes multiple frames); only synthetic same-tick
+      dispatch doesn't. Fixed by `await page.waitForTimeout(...)` between
+      each dispatched event.
+    - **Collapsed-sidebar hover popover**: hovering the sidebar toggle
+      button while the sidebar is collapsed (desktop only — mobile's
+      sidebar has no "collapsed" state, it's full-screen-or-hidden) shows
+      a quick-switch list of task lists without fully reopening the panel.
+      Pure CSS (`group` + `group-hover:opacity-100`), same idiom as the
+      node box's hover-revealed +/× buttons — no JS hover state needed,
+      and it naturally never appears on touch. New shared
+      `src/components/SidebarToggle.tsx`, replacing two previously-
+      duplicated raw toggle-button implementations (one in `Toolbar.tsx`,
+      one inline in `page.tsx`'s no-`mindMap` branch). Consolidating them
+      surfaced and fixed a real pre-existing gap as a side effect: the
+      `page.tsx` copy was `md:hidden` (mobile-only), so a desktop user who
+      collapsed the sidebar and then lost the active list (e.g. deleted
+      it) had *no way to reopen it* — that branch's toggle simply didn't
+      render on desktop. Removed the `md:hidden` restriction; the shared
+      component is now the only reachable toggle in both branches.
+19. **Drag-and-drop vs. canvas pan conflict** (2026-09-25) — user reported
+    that real mouse drags on a leaf node just panned the whole canvas
+    instead of dragging the leaf, immediately after entry #18 shipped
+    drag-and-drop reparenting. Root cause: React Flow's own pan-on-drag
+    (`panOnDrag`, on by default, never overridden) starts its pan gesture
+    from a `mousedown` handler attached at the pane level, which also
+    fires for a `mousedown` originating on a descendant node's content —
+    racing the browser's native HTML5 drag-and-drop gesture recognition on
+    that same `draggable=true` element and winning, since React Flow's
+    d3-zoom pan handling needs to (and does) call `preventDefault()` on
+    that `mousedown` to do its own thing, which suppresses the browser
+    from ever recognizing the subsequent movement as a native drag.
+    Fixed with React Flow's own purpose-built escape hatch rather than
+    anything bespoke: `noPanClassName` (default class `"nopan"`, confirmed
+    in `@xyflow/react`'s and `@xyflow/system`'s source — its pane-gesture
+    `createFilter` explicitly rejects pan for any `mousedown` wrapped in an
+    element carrying that class) added to the leaf node's button in
+    `MindMapNodeBox.tsx`, conditional on `draggable` (only leaves need it —
+    other node kinds were never draggable, so their normal pan-on-drag-from
+    behavior is untouched and, since `nopan` only affects the d3-zoom pan
+    filter, plain clicks/selection on a leaf are unaffected too). No
+    long-press/mode-switch UI needed, which the user had floated as an
+    alternative (à la iOS icon-rearrange) — the underlying issue was a
+    solvable event-filtering conflict, not a fundamental incompatibility
+    between the two gesture systems.
+    **This also explains why entry #18's own verification missed it**:
+    that testing used either `page.mouse`-synthesized mouse events (which,
+    per widely-documented Playwright/Puppeteer/CDP limitations, don't
+    reliably trigger Chromium's native drag-gesture recognition in the
+    first place — so it couldn't have hit this race either way) or
+    directly-dispatched synthetic `DragEvent`s (which skip the
+    `mousedown`-based pan-vs-drag race entirely, since they don't go
+    through real mousedown→native-drag-decision at all). Neither test path
+    was capable of exercising the actual bug. Re-verified this fix with a
+    realistic multi-step `page.mouse` drag sequence and confirmed: (1) the
+    canvas's `.react-flow__viewport` transform stays completely unchanged
+    throughout the drag (no pan hijack), (2) the leaf correctly reparents
+    on drop, (3) plain background panning elsewhere is unaffected, and (4)
+    a plain click-to-select on a leaf still works. **Caveat for future
+    testing of this exact interaction**: `page.mouse`-based drags were
+    apparently sufficient to trigger real native DnD in *this* Chromium/
+    Playwright combination once the pan conflict was removed (verified
+    above), even though that contradicts the general limitation cited —
+    treat `page.mouse`-based drag-and-drop testing as unreliable to depend
+    on across environments/versions regardless, and prefer a real-device/
+    real-browser check for anything drag-and-drop related before calling
+    it done.
+20. **i18n (Korean + English)** — a lightweight custom system, not a framework (`next-intl`/`react-i18next` were considered and rejected as overkill for this app's scale). `src/lib/i18n.ts` holds two flat dictionary objects (`ko`, `en`) typed against each other (`en: typeof ko`, so TS enforces both stay in sync — no runtime key-lookup, no missing-translation risk); `src/components/LanguageProvider.tsx` is a Context provider (`localStorage` under `mindtodo_language`, `useLanguage()` hook returning `{ language, setLanguage, t }` where `t` is the whole resolved dictionary object — call sites read `t.someKey`, not `t('someKey')`). **Note**: it originally read `localStorage` synchronously in its `useState` initializer, matching `ThemeProvider.tsx`'s pattern at the time — entry #16 changed that (SSR hydration mismatch), so the two providers' initialization no longer match; see #16 before assuming they're identical. A `한`/`EN` segmented-control toggle sits in the toolbar next to the theme toggle. **Scope: UI chrome only** — buttons, labels, toasts, confirm-modal text, aria-labels, and the *default* title given to a newly created list/task/subtask (`t.newList`/`t.newTaskDefault`/`t.newSubtaskDefault`, threaded through `addTaskNode`/`addLeafNode`/`makeTaskNode`/`makeLeafNode` as an optional `title` param). **Never translated: user-entered content** — existing task/list titles, notes, dates are exactly what the user typed, in whatever language that is; this app is not a translation tool. `useGoogleAuth.ts` also pulls `useLanguage()` for its own error strings, since it's a hook (not just components) and hooks can call other hooks freely. One gotcha: several `useCallback` dependency arrays initially listed individual `t.xxx` keys, which is unnecessary (fixed to depend on the whole `t` object instead) and tripped `react-hooks/exhaustive-deps` on a member-expression call site (`t.deleteListMessage(...)`) — just depend on `t` itself everywhere, since it's one atomic object swap per language change anyway.
 
 ## Current keyboard shortcuts (canvas focused, a node selected)
 
@@ -360,6 +471,7 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
 | `Enter` | add sibling |
 | `Delete` / `Backspace` | delete node + subtree; selection falls back to previous sibling, else parent |
 | `← → ↑ ↓` | navigate: left=parent, right=first child, up/down=prev/next in that depth column (crosses branches at the ends) |
+| `Ctrl/Cmd+↑ / ↓` | reorder: swap the selected node with its previous/next sibling (not navigation — the node itself moves) |
 | `F2` / `Escape` (not editing) | enter inline edit, select-all existing text |
 | any printable key (not editing) | enter inline edit, seeded with the typed character (replaces old title) |
 | double-click | enter inline edit |

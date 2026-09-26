@@ -15,7 +15,11 @@ export function LoginScreen({ isReady, hasClientId, expired, authError, onSignIn
   const { t } = useLanguage();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-4 bg-slate-50 p-6 text-center dark:bg-slate-950">
-      <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">MindToDo</h1>
+      <div className="flex items-center gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element -- see Sidebar.tsx's same note: tiny static SVG mark, not worth an image-config change */}
+        <img src="/logo.svg" alt="" className="h-8 w-8" />
+        <h1 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">MindToDo</h1>
+      </div>
       <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">{t.loginDescription}</p>
       {expired && (
         <p className="text-sm text-amber-600 dark:text-amber-400">{t.sessionExpired}</p>

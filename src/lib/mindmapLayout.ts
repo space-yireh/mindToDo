@@ -13,6 +13,8 @@ export interface MindMapNodeData {
   parentId: string | null;
   title: string;
   status: TaskStatus | null;
+  /** first line of `notes`, trimmed — used for a small badge + hover preview when non-empty */
+  notesPreview: string | null;
   direction: LayoutDirection;
   sourcePosition: Position;
   targetPosition: Position;
@@ -50,6 +52,7 @@ interface HierarchyDatum {
   kind: MindMapNodeKind;
   title: string;
   status: TaskStatus | null;
+  notes: string;
   children: HierarchyDatum[];
 }
 
@@ -138,12 +141,14 @@ export function computeMindMapLayout(options: ComputeLayoutOptions): {
     kind: "root",
     title: mindMap.title,
     status: null,
+    notes: "",
     children: visibleTaskNodes.map((node) => ({
       id: node.id,
       parentId: MINDMAP_ROOT_ID,
       kind: "task",
       title: node.title,
       status: node.status,
+      notes: node.notes,
       children: node.children
         .filter((leaf) => showCompleted || leaf.status !== "completed")
         .map((leaf) => ({
@@ -152,6 +157,7 @@ export function computeMindMapLayout(options: ComputeLayoutOptions): {
           kind: "leaf" as const,
           title: leaf.title,
           status: leaf.status,
+          notes: leaf.notes,
           children: [],
         })),
     })),
@@ -200,6 +206,11 @@ export function computeMindMapLayout(options: ComputeLayoutOptions): {
       onDelete = () => onDeleteLeafNode(parentId, d.data.id);
     }
 
+    // small notes badge — shown on any task/leaf whose notes aren't empty
+    // (never the root, which has no notes field at all)
+    const trimmedNotes = d.data.notes.trim();
+    const notesPreview = kind !== "root" && trimmedNotes ? trimmedNotes : null;
+
     // drag-and-drop reparenting: only leaves are draggable, and only
     // root/task nodes are valid drop targets (never a leaf's own current
     // task, and never another leaf — depth is capped at 2)
@@ -223,6 +234,7 @@ export function computeMindMapLayout(options: ComputeLayoutOptions): {
         parentId: d.data.parentId,
         title: d.data.title,
         status: d.data.status,
+        notesPreview,
         direction,
         sourcePosition,
         targetPosition,

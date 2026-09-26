@@ -51,6 +51,7 @@ const ko = {
   // canvas / node box
   addChildNodeAria: "자식 노드 추가",
   deleteNodeAria: "노드 삭제",
+  hasNotesAria: "메모 있음",
   newTaskDefault: "새 할일",
   newSubtaskDefault: "새 세부 할일",
   emptyCanvasHint: "루트 노드에서 + 버튼을 눌러 첫 할 일을 추가해보세요",
@@ -91,6 +92,8 @@ const ko = {
   toastListDeleteFailed: "목록 삭제 실패",
   toastExportSuccess: "내보내기 완료",
   toastExportFailed: "내보내기 실패",
+  toastCopiedMarkdown: "마크다운으로 복사했습니다",
+  toastCopyFailed: "복사에 실패했습니다",
 };
 
 const en: typeof ko = {
@@ -140,6 +143,7 @@ const en: typeof ko = {
 
   addChildNodeAria: "Add child node",
   deleteNodeAria: "Delete node",
+  hasNotesAria: "Has notes",
   newTaskDefault: "New Task",
   newSubtaskDefault: "New Subtask",
   emptyCanvasHint: "Click the + button on the root node to add your first task",
@@ -177,6 +181,8 @@ const en: typeof ko = {
   toastListDeleteFailed: "Failed to delete list",
   toastExportSuccess: "Export complete",
   toastExportFailed: "Export failed",
+  toastCopiedMarkdown: "Copied as markdown",
+  toastCopyFailed: "Copy failed",
 };
 
 export const translations: Record<Language, typeof ko> = { ko, en };

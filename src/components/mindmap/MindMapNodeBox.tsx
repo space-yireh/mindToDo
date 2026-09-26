@@ -12,6 +12,15 @@ const KIND_STYLES: Record<MindMapNodeKind, string> = {
   leaf: "bg-slate-50 text-slate-500 text-xs border-slate-200 !shadow-none dark:bg-slate-800/60 dark:text-slate-300 dark:border-slate-700/60",
 };
 
+function NotesIcon() {
+  return (
+    <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 20 20" stroke="currentColor" strokeWidth={1.8}>
+      <rect x="4" y="3" width="12" height="14" rx="1.5" />
+      <path strokeLinecap="round" d="M7 7.5h6M7 10.5h6M7 13.5h3.5" />
+    </svg>
+  );
+}
+
 const SELECTED_RING = "ring-2 ring-offset-2 ring-offset-slate-50 ring-amber-400 dark:ring-offset-slate-900";
 // subtle outline on every eligible drop target as soon as a leaf drag
 // starts (so users can see where they *can* drop before hovering there),
@@ -26,6 +35,7 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
     kind,
     title,
     status,
+    notesPreview,
     direction,
     sourcePosition,
     targetPosition,
@@ -233,6 +243,24 @@ function NodeBoxBase({ id, data, selected }: NodeProps<MindMapNode>) {
             </button>
           )}
         </div>
+      )}
+
+      {notesPreview && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          title={notesPreview}
+          aria-label={t.hasNotesAria}
+          className={[
+            "absolute flex h-4 w-4 items-center justify-center rounded-full bg-slate-400 text-white shadow hover:bg-slate-500 dark:bg-slate-500 dark:hover:bg-slate-400",
+            direction === "LR" ? "-bottom-1.5 left-1" : "-left-1.5 bottom-1",
+          ].join(" ")}
+        >
+          <NotesIcon />
+        </button>
       )}
       <span data-node-id={id} className="sr-only">
         {id}

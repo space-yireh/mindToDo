@@ -461,7 +461,126 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
     on across environments/versions regardless, and prefer a real-device/
     real-browser check for anything drag-and-drop related before calling
     it done.
-20. **i18n (Korean + English)** — a lightweight custom system, not a framework (`next-intl`/`react-i18next` were considered and rejected as overkill for this app's scale). `src/lib/i18n.ts` holds two flat dictionary objects (`ko`, `en`) typed against each other (`en: typeof ko`, so TS enforces both stay in sync — no runtime key-lookup, no missing-translation risk); `src/components/LanguageProvider.tsx` is a Context provider (`localStorage` under `mindtodo_language`, `useLanguage()` hook returning `{ language, setLanguage, t }` where `t` is the whole resolved dictionary object — call sites read `t.someKey`, not `t('someKey')`). **Note**: it originally read `localStorage` synchronously in its `useState` initializer, matching `ThemeProvider.tsx`'s pattern at the time — entry #16 changed that (SSR hydration mismatch), so the two providers' initialization no longer match; see #16 before assuming they're identical. A `한`/`EN` segmented-control toggle sits in the toolbar next to the theme toggle. **Scope: UI chrome only** — buttons, labels, toasts, confirm-modal text, aria-labels, and the *default* title given to a newly created list/task/subtask (`t.newList`/`t.newTaskDefault`/`t.newSubtaskDefault`, threaded through `addTaskNode`/`addLeafNode`/`makeTaskNode`/`makeLeafNode` as an optional `title` param). **Never translated: user-entered content** — existing task/list titles, notes, dates are exactly what the user typed, in whatever language that is; this app is not a translation tool. `useGoogleAuth.ts` also pulls `useLanguage()` for its own error strings, since it's a hook (not just components) and hooks can call other hooks freely. One gotcha: several `useCallback` dependency arrays initially listed individual `t.xxx` keys, which is unnecessary (fixed to depend on the whole `t` object instead) and tripped `react-hooks/exhaustive-deps` on a member-expression call site (`t.deleteListMessage(...)`) — just depend on `t` itself everywhere, since it's one atomic object swap per language change anyway.
+20. **Notes badge on the canvas** (2026-09-25/26) — user's idea: memos on a
+    node weren't visible anywhere except the properties panel, and they'd
+    started writing more of them. Original pitch was a literal extra
+    "3rd-level node" hanging off any leaf with notes — reviewed and
+    steered toward a lighter alternative instead (offered via
+    `AskUserQuestion`, user picked it): a small badge icon on the node
+    itself rather than a whole separate connected box. Rationale given:
+    Google Tasks has a hard 2-level cap (task/subtask), so a "3rd node"
+    could only ever be decorative, never a real tree node — and a full
+    extra box per annotated node would meaningfully widen already-dense
+    maps and need truncation/layout-math changes, where a badge needs
+    neither.
+    - `mindmapLayout.ts`: `HierarchyDatum` and `MindMapNodeData` both gained
+      `notes`/`notesPreview` (root always `null` — `MindMap` has no notes
+      field at all, only tasks/leaves do). `notesPreview` is the trimmed
+      `notes` string, or `null` when empty.
+    - `MindMapNodeBox.tsx`: a small circular badge (note-lines icon)
+      renders at the node's bottom-left corner — opposite corner from the
+      existing +/× buttons at top-right, so they never overlap — whenever
+      `notesPreview` is non-null. Native `title` attribute shows the full
+      note text on hover (simplest possible preview, no custom tooltip
+      component); clicking the badge calls the same `onSelect` the node
+      itself uses, opening the properties panel already showing that note.
+    - **Scope decision, changed from the user's original framing**: shown
+      on *both* task (depth 1) and leaf (depth 2) nodes with notes, not
+      leaf-only. The user's original idea had an explicit rule — hide it
+      if a leaf gets promoted to a task (depth 1) via entry #18's
+      drag-and-drop promotion — but that rule was motivated by the
+      *full-node* design (a promoted leaf's memo-node could be confused
+      with a real depth-2 child at task level). A badge has no such
+      collision risk, so showing it uniformly at both levels is simpler
+      *and* means promotion needs no special-case: `promoteLeafToTask`
+      already preserves `notes` unchanged, so the badge just keeps
+      showing after promotion with no extra logic.
+    - Verified via Playwright: badge appears only on nodes with non-empty
+      notes (confirmed both a task and a leaf show it, and their
+      note-less siblings don't); hover `title` attribute matches the note
+      text; clicking the badge opens the properties panel with that exact
+      note content.
+21. **Login screen logo, Ctrl/Cmd+C copies markdown** (2026-09-26) — two
+    quick asks, plus a third (Google-Tasks-style favorite/star) that was
+    investigated and explicitly declined by the user once the constraint
+    was clear:
+    - **Login screen logo**: `public/logo.svg` (added in entry #15 for the
+      sidebar brand row) now also renders above the "MindToDo" heading in
+      `LoginScreen.tsx` — same plain `<img>` pattern (no `next/image`,
+      same reasoning as `Sidebar.tsx`'s existing comment: not worth an
+      image-config change for one small static SVG).
+    - **`Ctrl/Cmd+C` copies the canvas as GFM markdown** — new
+      `src/lib/markdownExport.ts` (`mindMapToMarkdown`), wired into
+      `MindMapCanvas.tsx`'s existing `handleKeyDown` inside the same
+      `if (e.ctrlKey || e.metaKey)` block the zoom/reorder shortcuts live
+      in. Scope follows the current selection: a leaf copies just that
+      item, a task copies it plus its subtasks, and no selection (or the
+      root) copies the whole map — deliberately *not* gated behind
+      `if (editingNodeId || !selection) return;` like the shortcuts below
+      it, since the no-selection case is a real, valid whole-map copy, not
+      a no-op to skip. Output format: `- [ ]`/`- [x]` checkboxes per
+      status, nested one level for subtasks, notes as a `>` blockquote
+      line under the item, due dates appended in parens using the
+      existing `t.fieldDueDate` label (so it's already correctly
+      localized, no new key needed there) — a `Clipboard.writeText()`
+      call, confirmed/failed via new `t.toastCopiedMarkdown`/
+      `t.toastCopyFailed` toasts. Verified via Playwright (with the
+      `clipboard-read`/`clipboard-write` context permissions granted) for
+      all three scopes plus the toast.
+    - **Favorite/star toggle — investigated, not built.** Checked the
+      actual `RemoteTask` shape this app already round-trips
+      (`googleTasksApi.ts`): `id, title, notes, due, status, parent,
+      position` — the Google Tasks REST API has no starred/favorite/
+      priority field at all, so anything called "favorite" here could
+      only ever be (a) hacked into `title`/`notes` as a prefix marker to
+      survive export/import, or (b) a purely local flag that resets on
+      every re-import (this app holds no other storage — see the "Data
+      model & sync policy" section up top). Asked the user which,
+      expecting they'd want (a); they picked neither — "if it's not in
+      the API, let's not do it" — and the feature was dropped rather than
+      built as a compromise. Worth remembering if this comes up again:
+      don't default to the title/notes-prefix hack without asking, this
+      user has already said no to it once for this exact reason.
+22. **Login screen logo layout, Cmd/Ctrl+A selects root, zoom shortcuts
+    made global** (2026-09-26):
+    - **Login screen logo**: was stacked (icon above the "MindToDo"
+      heading, entry #21); changed to match the sidebar brand row's
+      side-by-side layout (icon left of the text) per explicit request to
+      make the two consistent.
+    - **`Cmd/Ctrl+A` selects the root node** — this app's "select all",
+      chosen specifically because selecting root is also what scopes
+      entry #21's `Ctrl+C` markdown copy to the whole map, so the two
+      shortcuts compose naturally (`Cmd+A` then `Cmd+C` = copy everything).
+      `e.preventDefault()` is load-bearing here, not decorative — without
+      it the browser's own native "select all page text" still fires
+      alongside it and highlights the whole UI; verified via
+      `window.getSelection().toString()` staying empty after the shortcut.
+    - **Zoom shortcuts (`Ctrl +/-/0/1`) moved from the canvas div's local
+      `onKeyDown` to a global `window` keydown listener.** User reported
+      a vague "keymap conflict" with these from earlier testing; traced it
+      by comparing canvas zoom before/after the shortcut with and without
+      the canvas div having actual DOM focus first. Confirmed: the local
+      `onKeyDown` only ever fires once the canvas has been explicitly
+      clicked into, so any time focus was elsewhere (the sidebar, or
+      nothing yet right after page load) `Ctrl+0/+/-/1` silently did
+      nothing in the app — free to fall through to the *browser's own*
+      native zoom shortcuts instead, which is the conflict. Fixed by
+      moving just the zoom branch into a `useEffect`-registered global
+      listener in `MindMapCanvas.tsx`, mirroring the existing
+      undo/redo/save/import global shortcuts already in `page.tsx`
+      (including their same "skip while `document.activeElement` is an
+      input/textarea" guard). Left the *other* canvas shortcuts
+      (Tab/Enter/Delete/arrows/F2/type-to-edit/reorder/copy/select-root)
+      as canvas-focus-scoped, deliberately — those are about the
+      currently-selected *node*, which is a meaningfully different
+      concept than "the app is open, zoom whatever's in view," and
+      widening all of them to global was a bigger, riskier change than
+      this specific complaint called for. Verified the fix doesn't
+      double-fire when the canvas *does* have focus (both the
+      global-listener case and the already-focused case) by checking the
+      zoom's per-keypress multiplicative factor stayed consistent
+      (~1.2×) across both.
+23. **i18n (Korean + English)** — a lightweight custom system, not a framework (`next-intl`/`react-i18next` were considered and rejected as overkill for this app's scale). `src/lib/i18n.ts` holds two flat dictionary objects (`ko`, `en`) typed against each other (`en: typeof ko`, so TS enforces both stay in sync — no runtime key-lookup, no missing-translation risk); `src/components/LanguageProvider.tsx` is a Context provider (`localStorage` under `mindtodo_language`, `useLanguage()` hook returning `{ language, setLanguage, t }` where `t` is the whole resolved dictionary object — call sites read `t.someKey`, not `t('someKey')`). **Note**: it originally read `localStorage` synchronously in its `useState` initializer, matching `ThemeProvider.tsx`'s pattern at the time — entry #16 changed that (SSR hydration mismatch), so the two providers' initialization no longer match; see #16 before assuming they're identical. A `한`/`EN` segmented-control toggle sits in the toolbar next to the theme toggle. **Scope: UI chrome only** — buttons, labels, toasts, confirm-modal text, aria-labels, and the *default* title given to a newly created list/task/subtask (`t.newList`/`t.newTaskDefault`/`t.newSubtaskDefault`, threaded through `addTaskNode`/`addLeafNode`/`makeTaskNode`/`makeLeafNode` as an optional `title` param). **Never translated: user-entered content** — existing task/list titles, notes, dates are exactly what the user typed, in whatever language that is; this app is not a translation tool. `useGoogleAuth.ts` also pulls `useLanguage()` for its own error strings, since it's a hook (not just components) and hooks can call other hooks freely. One gotcha: several `useCallback` dependency arrays initially listed individual `t.xxx` keys, which is unnecessary (fixed to depend on the whole `t` object instead) and tripped `react-hooks/exhaustive-deps` on a member-expression call site (`t.deleteListMessage(...)`) — just depend on `t` itself everywhere, since it's one atomic object swap per language change anyway.
 
 ## Current keyboard shortcuts (canvas focused, a node selected)
 
@@ -472,6 +591,8 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
 | `Delete` / `Backspace` | delete node + subtree; selection falls back to previous sibling, else parent |
 | `← → ↑ ↓` | navigate: left=parent, right=first child, up/down=prev/next in that depth column (crosses branches at the ends) |
 | `Ctrl/Cmd+↑ / ↓` | reorder: swap the selected node with its previous/next sibling (not navigation — the node itself moves) |
+| `Ctrl/Cmd+C` | copy as markdown: selected leaf, or task+subtasks, or (no selection/root) the whole map |
+| `Ctrl/Cmd+A` | select root ("select all" for this app — pairs with `Ctrl/Cmd+C` above to copy everything) |
 | `F2` / `Escape` (not editing) | enter inline edit, select-all existing text |
 | any printable key (not editing) | enter inline edit, seeded with the typed character (replaces old title) |
 | double-click | enter inline edit |
@@ -482,6 +603,7 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
 | `Ctrl/Cmd+Y` or `Ctrl/Cmd+Shift+Z` | redo |
 | `Ctrl/Cmd+S` | open export confirm modal |
 | `Ctrl/Cmd+R` | open import confirm modal |
+| `Ctrl/Cmd +` / `-` / `0` / `1` | zoom in/out, fit view, reset to 100% — **global**, not canvas-focus-scoped like the rows above (entry #22), same "skip in a text field" guard as Z/Y/S/R |
 
 Adding a node (Tab/Enter/`+` button) always drops straight into edit mode —
 this was a deliberate fix so keyboard flow never breaks stride.

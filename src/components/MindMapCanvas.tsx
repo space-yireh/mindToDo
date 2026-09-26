@@ -14,12 +14,14 @@ import {
 import "@xyflow/react/dist/style.css";
 import { mindMapNodeTypes } from "@/components/mindmap/MindMapNodeBox";
 import { useLanguage } from "@/components/LanguageProvider";
+import { useToast } from "@/components/ToastProvider";
 import {
   MINDMAP_ROOT_ID,
   computeMindMapLayout,
   getNavigationTarget,
   type NavigationDirection,
 } from "@/lib/mindmapLayout";
+import { mindMapToMarkdown } from "@/lib/markdownExport";
 import type { MindMap, Selection } from "@/lib/types";
 
 interface MindMapCanvasProps {
@@ -155,6 +157,7 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const { t } = useLanguage();
+  const { showToast } = useToast();
 
   const { zoomIn, zoomOut, zoomTo, fitView, setCenter, getZoom } = useReactFlow();
   const storeApi = useStoreApi();
@@ -267,29 +270,38 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
     return () => clearTimeout(timer);
   }, [showCompleted, fitView, isMobile]);
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    // Zoom keyboard shortcuts
-    if (e.ctrlKey || e.metaKey) {
+  // Zoom shortcuts, global rather than scoped to the canvas div's own
+  // onKeyDown below: those only fire once the canvas has actual DOM focus
+  // (i.e. after clicking directly on it), so Ctrl+0/+/-/1 silently did
+  // nothing — or let the *browser's own* native zoom fire instead — any
+  // time focus was elsewhere (the sidebar, or nothing yet on a fresh
+  // load). Matches the existing global undo/redo/save/import shortcuts in
+  // page.tsx, including their same "skip while typing in a field" guard.
+  useEffect(() => {
+    function handleGlobalZoomKeydown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea") return;
       if (e.key === "=" || e.key === "+") {
         e.preventDefault();
         zoomIn({ duration: 200 });
-        return;
-      }
-      if (e.key === "-") {
+      } else if (e.key === "-") {
         e.preventDefault();
         zoomOut({ duration: 200 });
-        return;
-      }
-      if (e.key === "0") {
+      } else if (e.key === "0") {
         e.preventDefault();
         fitView({ maxZoom: isMobile ? 0.7 : 1.0, duration: 300 });
-        return;
-      }
-      if (e.key === "1") {
+      } else if (e.key === "1") {
         e.preventDefault();
         zoomTo(1, { duration: 200 });
-        return;
       }
+    }
+    window.addEventListener("keydown", handleGlobalZoomKeydown);
+    return () => window.removeEventListener("keydown", handleGlobalZoomKeydown);
+  }, [zoomIn, zoomOut, zoomTo, fitView, isMobile]);
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.ctrlKey || e.metaKey) {
       // reorder the selected node among its siblings — distinct from plain
       // ArrowUp/Down below, which navigate selection instead of moving it
       if ((e.key === "ArrowUp" || e.key === "ArrowDown") && !editingNodeId && selection) {
@@ -297,6 +309,29 @@ function MindMapCanvasInner(props: MindMapCanvasProps) {
         const dir = e.key === "ArrowUp" ? "up" : "down";
         if (selection.depth === 1) props.onMoveTaskNode(selection.nodeId, dir);
         else if (selection.depth === 2) props.onMoveLeafNode(selection.parentId, selection.nodeId, dir);
+        return;
+      }
+      // copy as markdown — scoped to whatever's selected (leaf: just that
+      // item, task: item + its subtasks, nothing/root: the whole map).
+      // Not gated on `selection` like the other shortcuts below, since the
+      // no-selection case is a valid whole-map copy, not a no-op.
+      if (e.key.toLowerCase() === "c" && !editingNodeId) {
+        e.preventDefault();
+        const markdown = mindMapToMarkdown(mindMap, selection, t.fieldDueDate);
+        navigator.clipboard
+          .writeText(markdown)
+          .then(() => showToast(t.toastCopiedMarkdown, "success"))
+          .catch(() => showToast(t.toastCopyFailed, "error"));
+        return;
+      }
+      // Cmd/Ctrl+A selects the root — this app's "select all", since
+      // selecting root is also what scopes Ctrl+C to the whole map above.
+      // preventDefault here is required, not optional: without it the
+      // browser's own native "select all page text" still fires alongside
+      // this and highlights the entire UI.
+      if (e.key.toLowerCase() === "a" && !editingNodeId) {
+        e.preventDefault();
+        props.onSelectRoot();
         return;
       }
     }

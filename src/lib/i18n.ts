@@ -6,13 +6,10 @@ const ko = {
   // auth / login screen
   loginDescription: "마인드맵으로 할 일을 설계하고, 버튼 한 번으로 Google Tasks에 동기화하세요.",
   sessionExpired: "세션이 만료되었습니다. 다시 로그인해주세요.",
-  missingClientId: "NEXT_PUBLIC_GOOGLE_CLIENT_ID 환경변수가 설정되지 않았습니다.",
   signIn: "Google 계정으로 로그인",
-  signInPreparing: "로그인 준비 중…",
-  authNotReady: "아직 로그인 준비가 되지 않았습니다. 잠시 후 다시 시도해주세요.",
-  scriptLoadFailed: "Google Identity Services 스크립트 로드 실패",
   loginFailed: "Google 로그인에 실패했습니다.",
   loginCancelled: "로그인이 취소되었습니다. 다시 시도해주세요.",
+  signOutAria: "로그아웃",
 
   // sidebar
   newList: "새 목록",
@@ -102,13 +99,10 @@ const en: typeof ko = {
   loginDescription:
     "A personal app for planning tasks as a mind map and syncing with Google Tasks.",
   sessionExpired: "Your session has expired. Please sign in again.",
-  missingClientId: "The NEXT_PUBLIC_GOOGLE_CLIENT_ID environment variable is not set.",
   signIn: "Sign in with Google",
-  signInPreparing: "Preparing sign-in…",
-  authNotReady: "Sign-in isn't ready yet. Please try again in a moment.",
-  scriptLoadFailed: "Failed to load the Google Identity Services script",
   loginFailed: "Google sign-in failed.",
   loginCancelled: "Sign-in was cancelled. Please try again.",
+  signOutAria: "Sign out",
 
   newList: "New List",
   noLists: "You haven't created a list yet. Create your first one!",

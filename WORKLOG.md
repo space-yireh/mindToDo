@@ -9,22 +9,32 @@ and state*, not how to `npm install`.
 
 ## Project in one paragraph
 
-Mind-map task manager that syncs with Google Tasks. Frontend-only: no
-backend, no database, no Next.js API routes — the browser calls the Google
-Tasks REST API directly and holds the mind map only in React state (nothing
-persists locally; refresh = gone until you re-import). One mind map == one
-Google TaskList. Depth 0 = the list itself, depth 1 = Task, depth 2 =
-Subtask — this 3-level cap is a hard Google Tasks API limitation, not a
-choice.
+Mind-map task manager that syncs with Google Tasks. The *data* path is
+still frontend-only — no database, ever: the browser calls the Google Tasks
+REST API directly and holds the mind map only in React state (nothing
+persists locally; refresh = gone until you re-import). **Auth is no longer
+frontend-only** (changed 2026-10-31, see entry #23): four Next.js Route
+Handlers under `src/app/api/auth/` do Google's Authorization Code Flow
+server-side and hold an AES-256-GCM–encrypted refresh token in an httpOnly
+cookie, specifically so a returning user doesn't have to re-consent (and
+trigger a Google security-alert email) on every visit. No database for this
+either — the encrypted token lives only in the user's own cookie, never
+server-side storage. One mind map == one Google TaskList. Depth 0 = the
+list itself, depth 1 = Task, depth 2 = Subtask — this 3-level cap is a hard
+Google Tasks API limitation, not a choice.
 
 ## Stack
 
 - Next.js 16 (App Router, Turbopack), TypeScript, Tailwind v4 — every
-  component is `"use client"`, nothing server-rendered fetches data
+  UI component is `"use client"`; the only server-rendered code is the four
+  auth Route Handlers (`runtime = "nodejs"`) and the static `/terms`/
+  `/privacy` pages
 - `@xyflow/react` (React Flow) + `d3-hierarchy` for the mind-map canvas
-- Google Identity Services (`initTokenClient`) for auth — access token lives
-  in memory only, expires in ~1h, no silent refresh (see
-  `src/lib/useGoogleAuth.ts`)
+- Auth: server-side Authorization Code Flow (`src/app/api/auth/*`,
+  `src/lib/server/*`) issues short-lived access tokens to the client, which
+  holds one in memory and silently refreshes it via `POST /api/auth/token`
+  (`src/lib/useGoogleAuth.ts`) — see entry #23 for the full design and why
+  it replaced the old client-only GIS flow
 - No test suite. Verification is `npx tsc --noEmit` + `npm run lint` +
   `npm run build` + manual Playwright smoke tests (see "How this was
   verified" below) — there is nothing else checking correctness.
@@ -580,7 +590,230 @@ depth-tagged union (`{depth:0}` / `{depth:1,nodeId}` /
       global-listener case and the already-focused case) by checking the
       zoom's per-keypress multiplicative factor stayed consistent
       (~1.2×) across both.
-23. **i18n (Korean + English)** — a lightweight custom system, not a framework (`next-intl`/`react-i18next` were considered and rejected as overkill for this app's scale). `src/lib/i18n.ts` holds two flat dictionary objects (`ko`, `en`) typed against each other (`en: typeof ko`, so TS enforces both stay in sync — no runtime key-lookup, no missing-translation risk); `src/components/LanguageProvider.tsx` is a Context provider (`localStorage` under `mindtodo_language`, `useLanguage()` hook returning `{ language, setLanguage, t }` where `t` is the whole resolved dictionary object — call sites read `t.someKey`, not `t('someKey')`). **Note**: it originally read `localStorage` synchronously in its `useState` initializer, matching `ThemeProvider.tsx`'s pattern at the time — entry #16 changed that (SSR hydration mismatch), so the two providers' initialization no longer match; see #16 before assuming they're identical. A `한`/`EN` segmented-control toggle sits in the toolbar next to the theme toggle. **Scope: UI chrome only** — buttons, labels, toasts, confirm-modal text, aria-labels, and the *default* title given to a newly created list/task/subtask (`t.newList`/`t.newTaskDefault`/`t.newSubtaskDefault`, threaded through `addTaskNode`/`addLeafNode`/`makeTaskNode`/`makeLeafNode` as an optional `title` param). **Never translated: user-entered content** — existing task/list titles, notes, dates are exactly what the user typed, in whatever language that is; this app is not a translation tool. `useGoogleAuth.ts` also pulls `useLanguage()` for its own error strings, since it's a hook (not just components) and hooks can call other hooks freely. One gotcha: several `useCallback` dependency arrays initially listed individual `t.xxx` keys, which is unnecessary (fixed to depend on the whole `t` object instead) and tripped `react-hooks/exhaustive-deps` on a member-expression call site (`t.deleteListMessage(...)`) — just depend on `t` itself everywhere, since it's one atomic object swap per language change anyway.
+23. **Server-side Authorization Code Flow replaces client-only GIS auth**
+    (2026-10-31) — the single biggest architectural change in this
+    project's history. Motivation: the old `initTokenClient` flow (access
+    token only, no refresh token, ~1h lifetime, no silent renewal) meant
+    every browser restart or 1h-idle session needed full re-login, and
+    Google sends a security-alert email on every fresh consent — both a
+    real UX cost and, apparently, enough repeated "someone signed in to
+    your account" emails to be worth fixing properly. Full spec was
+    user-provided (a detailed Korean prompt covering every file and
+    decision below); this entry is the as-built record.
+    **Hard constraints that shaped every decision below**: no database,
+    ever — the refresh token is encrypted and lives *only* in the user's
+    own httpOnly cookie, never server-side storage or logs; the requested
+    OAuth scope stays exactly `.../auth/tasks` (adding `openid`/`email`/
+    `profile` would invalidate the already-approved Google OAuth
+    verification); Google Tasks API calls stay direct browser↔Google, the
+    new server only ever touches *auth* tokens, never task data.
+    - **New server modules** (`src/lib/server/`): `env.ts` validates
+      `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`AUTH_COOKIE_SECRET`/
+      `APP_URL` lazily (first access inside a request, not at module load —
+      a missing var fails loudly with a clear message from whichever route
+      actually needed it, confirmed via a real request: see testing below).
+      `crypto.ts`: AES-256-GCM, random 12-byte IV per call, serialized as
+      `iv.tag.ciphertext` (each segment base64url) — `decrypt()` is
+      spec'd to *never* throw, any failure (tampered value, wrong key
+      length, wrong key entirely) just returns `null`, so callers always
+      have a single "did this work" check. `cookies.ts`: `mt_rt` (refresh
+      token, `Path=/api/auth`, `httpOnly`, `Secure` in production,
+      `SameSite=Lax`, 30-day `maxAge`) and `mt_oauth_state` (CSRF nonce,
+      same flags, 10-minute `maxAge`) — clearing either uses
+      `.set(name, "", { ...sameOptions, maxAge: 0 })` rather than
+      `.delete(name)`, since deletion must match the original `path`
+      exactly and the explicit `.set` form is the unambiguous way to
+      guarantee that. `google.ts`: thin `fetch`-based wrappers around
+      Google's token/revoke endpoints (no SDK, matching the existing
+      `googleTasksApi.ts` style) — `GoogleAuthError` carries the HTTP
+      status so callers can tell "this refresh token is permanently dead
+      (400 `invalid_grant`)" apart from "Google/network hiccuped, try
+      again (5xx or a network-level `TypeError`)". `csrf.ts`:
+      `isSameOrigin()` requires a matching `Origin` header, used by the
+      two state-changing POST routes.
+    - **Four Route Handlers** (`src/app/api/auth/`, all `runtime =
+      "nodejs"`): `login` (GET) redirects to Google's consent screen,
+      `redirect_uri` built from `APP_URL` rather than the request's own
+      Host header (avoids www/apex mismatches), no `prompt` param by
+      default (the whole point — avoids forcing re-consent/the alert
+      email every time). `callback` (GET) validates `state` against the
+      `mt_oauth_state` cookie, exchanges the code, and encrypts+stores the
+      refresh token. **Loop-safe consent retry**: an already-consented
+      Google account doesn't hand back a `refresh_token` on a plain
+      authorize request — only when `prompt=consent` is forced. Rather
+      than a second cookie or query param to track "have we already
+      retried", the retry marker rides inside the `state` value itself
+      (`${nonce}.consent` vs plain `${nonce}`) — `login` appends it when
+      called with `?consent=1`, `callback` checks the suffix to decide
+      whether a missing `refresh_token` should trigger one retry
+      (`/api/auth/login?consent=1`) or give up
+      (`/?auth_error=failed`), so it can only ever loop once. `token`
+      (POST) is the one the client polls/calls to get a fresh access
+      token: Origin-checked, decrypts `mt_rt`, calls Google's refresh
+      endpoint, re-sets the cookie on every success (this *is* the
+      30-day sliding expiry — not a separate mechanism), and returns
+      `Cache-Control: no-store`. Error mapping: no cookie / undecryptable
+      cookie / Google `invalid_grant` (or any `status < 500`) → clear the
+      cookie, `401 {error:"login_required"}`; network failure or Google
+      5xx → leave the cookie alone, `503 {error:"transient"}` — this
+      distinction is what lets the frontend *not* log someone out just
+      because Google's token endpoint hiccuped. `logout` (POST) is
+      best-effort: calls Google's revoke endpoint (failure ignored — the
+      cookie still gets cleared either way) then clears `mt_rt`, `204`.
+    - **Frontend (`useGoogleAuth.ts`, full rewrite, same returned shape as
+      before so `page.tsx`/`LoginScreen.tsx` mostly didn't need to change
+      their own structure)**: `signIn` is just `window.location.href =
+      "/api/auth/login"` — a real top-level navigation, not client-side
+      routing, since it has to hit a Route Handler that itself redirects
+      to Google (confirmed this needed an explicit
+      `eslint-disable-next-line @next/next/no-location-assign-relative-destination`,
+      the rule can't tell an API route from a Next.js page). `refresh()`
+      (exposed as `handleUnauthorized`) is the one function that does
+      everything: calls `/api/auth/token`, updates `accessToken`/
+      `expired` state, and schedules the next automatic refresh 5 minutes
+      before the token's reported expiry. Concurrent callers (e.g.
+      several Google Tasks requests 401-ing around the same moment) share
+      one in-flight promise via a ref, so a burst never triggers more than
+      one real refresh call. Also re-runs on `visibilitychange` (a
+      backgrounded tab's `setTimeout` can be throttled/paused, so a
+      laptop left asleep past the token's lifetime needs a check on
+      wake, not just the schedule). `isReady` was repurposed: it no
+      longer means "GIS script loaded" (that whole step is gone, sign-in
+      is instant now), it means "the mount-time *is there already a
+      session?* check has resolved" — `page.tsx` gates on it with a
+      blank frame to avoid flashing `LoginScreen` at a returning user
+      for the one network round-trip that check takes. Dropped from the
+      hook's public shape entirely: `hasClientId` (the client has no way
+      to know whether the *server's* env is configured anymore) and the
+      GIS-specific `missingClientId`/`signInPreparing`/`authNotReady`/
+      `scriptLoadFailed` i18n keys (removed from both dictionaries,
+      confirmed unused first via a repo-wide grep).
+      **`?auth_error=cancelled|failed` handling**: a one-time effect reads
+      the query param on mount, sets the matching existing
+      `loginCancelled`/`loginFailed` message (both already existed from
+      the old flow, reused as-is), then strips it via
+      `history.replaceState` so a refresh doesn't re-show it — the
+      `setState`-in-effect call here needed its own
+      `eslint-disable-next-line react-hooks/set-state-in-effect` (same
+      precedent as entry #16's `LanguageProvider` fix: there's no SSR
+      value to diverge from, this only ever runs client-side after a
+      redirect, so the rule's general concern doesn't apply).
+      **The `refresh`/`scheduleRefresh` circular reference**: `refresh`
+      needs to call `scheduleRefresh` after a successful call, and the
+      timer `scheduleRefresh` sets needs to call `refresh` again when it
+      fires — two `useCallback`s each needing the other hits a genuine
+      temporal-dead-zone error (confirmed by lint, not just theory).
+      Fixed with a ref (`refreshRef`, updated in a `useEffect` right
+      after `refresh` is defined, dereferenced only once the timeout
+      actually fires) rather than restructuring into one giant function —
+      keeps the two concerns (schedule vs. do-the-refresh) readable as
+      separate pieces.
+    - **401-retry policy, the other half of the spec that isn't just the
+      hook**: "refresh once, retry once" needed to live at the *call
+      site*, not inside the hook, since only the caller knows how to
+      retry its own specific Google Tasks request. New
+      `src/lib/withAuthRetry.ts`: wraps a call, and on a
+      `GoogleTasksApiError` with `status === 401` calls `refresh` and
+      retries exactly once with whatever token it returns (or lets the
+      original 401 propagate if `refresh` couldn't produce one — which
+      by then has already flipped `accessToken` to `null`, so the app
+      falls back to `LoginScreen` on its own). Wrapped at the *outermost*
+      call in `page.tsx` for all five Google Tasks entry points
+      (`listTaskLists`, `importMindMap`, `exportMindMap`,
+      `createTaskList`, `deleteTaskList`) rather than threading retry
+      logic through every individual `fetch` inside `googleTasksApi.ts`/
+      `sync.ts`. For `exportMindMap` specifically (delete-all-then-
+      recreate, many sequential calls) this means a mid-export token
+      expiry restarts the *whole* export with the fresh token rather than
+      resuming mid-list — accepted as fine given export was already
+      designed to be safely re-run (idempotent delete, per entry one of
+      the bugs list) and restructuring to resume mid-call was a much
+      bigger change than the spec asked for.
+      `page.tsx`'s `handleApiError` simplified as a result: it used to
+      call `auth.handleUnauthorized()` itself on a 401; now that
+      `withAuthRetry` already did the refresh-and-retry *before* any
+      error reaches `handleApiError`, a 401 getting there at all means
+      retry already failed and auth state is already updated — it just
+      shows the toast.
+    - **New sign-out button** — didn't exist in the UI at all before this
+      (the hook had a `signOut` function, but nothing called it), which
+      made "로그아웃 → 쿠키 삭제, 재로그인 필요" (one of the spec's own
+      test scenarios) untestable without one. Added as an icon button in
+      `Toolbar.tsx` (now exports `SignOutIcon` too, alongside the
+      existing `PanelIcon` export pattern) — then, mirroring the same gap
+      entry #18 found and fixed for `SidebarToggle`, discovered the
+      Toolbar itself doesn't render in `page.tsx`'s no-`mindMap` branch,
+      so a user who hadn't picked a list yet would have no sign-out
+      affordance either. Added a second instance there, same icon,
+      directly in that branch's header row.
+    - **`.env.example` added**, `.gitignore`'s blanket `.env*` rule given a
+      `!.env.example` exception so it's actually committed (unlike
+      `.env.local`, which stays ignored). `NEXT_PUBLIC_GOOGLE_CLIENT_ID`
+      itself intentionally left alone in `.env.local` — it's no longer
+      read by any code (confirmed via grep) but removing it wasn't asked
+      for and it's gitignored anyway, so there's no leak risk in leaving
+      it be.
+    - **Privacy policy** (`src/app/privacy/page.tsx`) updated section by
+      section (§1 collection, §4 retention, §5 data transfer, §6 cookies,
+      §7 user rights, §8 protection) to stop claiming no server is
+      involved in auth at all — it still accurately says task data and
+      token *values* never reach a database, but now discloses the
+      refresh-token cookie specifically (AES-256-GCM, httpOnly/Secure/
+      SameSite=Lax, 30-day sliding, revoked on logout). §6 previously
+      flatly claimed no cookies at all, which would have become false the
+      moment this shipped — this was the one section that *had* to change,
+      not just could.
+    - **Testing**: no real Google client secret available in this
+      environment, so the actual authorization-code exchange and refresh
+      against Google's real endpoints couldn't be exercised end-to-end —
+      that needs the user's real credentials + a real consent flow,
+      exactly as the spec's own test-scenario section expects the user to
+      run post-deploy. Everything *not* dependent on a genuine code/token
+      was verified directly against a running dev server (temporary
+      values added to `.env.local`, restored to its exact original
+      content after): `/api/auth/login`'s redirect URL (confirmed `scope`
+      is exactly `tasks`, no `openid`/`email`/`profile`, no `prompt` by
+      default, `prompt=consent` only with `?consent=1`, `state` carries
+      the `.consent` marker correctly); the `mt_oauth_state` cookie's
+      exact attributes; all three `callback` error paths
+      (`error=access_denied` → cancelled, missing/mismatched `state` →
+      failed, a real call to Google's token endpoint with a syntactically
+      valid-but-fake code+secret → caught and redirected, confirming the
+      try/catch around the real network call works); `token`'s CSRF
+      check (missing/wrong `Origin` → 403), missing-cookie → 401, a
+      garbage cookie value → 401 + cookie cleared, and — the one that
+      actually reached Google for real — a validly-encrypted but fake
+      refresh token, which Google's real endpoint rejected and the route
+      correctly classified as permanent (401, cookie cleared) rather than
+      transient; `logout`'s CSRF check and cookie clearing; the missing-
+      env-var failure path (confirmed the exact clear error message from
+      `env.ts` in the server log, not a cryptic crash) and the
+      wrong-key-length `AUTH_COOKIE_SECRET` case (confirmed this one
+      *doesn't* throw loudly — `decrypt()` swallows it into the same
+      `401 login_required` as any other decrypt failure, which is correct
+      per the "decrypt must never throw" spec, not a gap). On the
+      frontend, used Playwright's `page.route()` to mock `/api/auth/token`
+      entirely and verified: no session → `LoginScreen`; valid session →
+      `LoginScreen` never renders at all; `?auth_error=cancelled`/
+      `?auth_error=failed` both show the right message *and* clean the
+      URL; the sign-out button (both toolbar locations) calls `/api/auth/
+      logout` and returns to `LoginScreen`; and the full 401-retry
+      recovery path (a mocked Google Tasks call 401s once, `withAuthRetry`
+      refreshes, the retry succeeds, the user never sees `LoginScreen` at
+      all) — confirmed via `tokenCallCount`/`taskListsCallCount` and the
+      recovered data actually rendering.
+    - **Not done, by explicit design**: no database anywhere (the whole
+      point); no change to the Google Tasks sync logic itself
+      (`sync.ts`/`googleTasksApi.ts` untouched — only *how* the access
+      token is obtained changed, not how it's used); scope stays exactly
+      `.../auth/tasks`, confirmed in the actual redirect URL during
+      testing, not just in the route source. Manual, human-only follow-up
+      (Google Cloud Console redirect URIs + client secret, Vercel env
+      vars, confirming the consent-screen scope list is untouched,
+      deploying the updated privacy policy) is **not done by this
+      entry** and was never going to be — see the chat summary handed to
+      the user alongside this entry for the exact checklist.
+24. **i18n (Korean + English)** — a lightweight custom system, not a framework (`next-intl`/`react-i18next` were considered and rejected as overkill for this app's scale). `src/lib/i18n.ts` holds two flat dictionary objects (`ko`, `en`) typed against each other (`en: typeof ko`, so TS enforces both stay in sync — no runtime key-lookup, no missing-translation risk); `src/components/LanguageProvider.tsx` is a Context provider (`localStorage` under `mindtodo_language`, `useLanguage()` hook returning `{ language, setLanguage, t }` where `t` is the whole resolved dictionary object — call sites read `t.someKey`, not `t('someKey')`). **Note**: it originally read `localStorage` synchronously in its `useState` initializer, matching `ThemeProvider.tsx`'s pattern at the time — entry #16 changed that (SSR hydration mismatch), so the two providers' initialization no longer match; see #16 before assuming they're identical. A `한`/`EN` segmented-control toggle sits in the toolbar next to the theme toggle. **Scope: UI chrome only** — buttons, labels, toasts, confirm-modal text, aria-labels, and the *default* title given to a newly created list/task/subtask (`t.newList`/`t.newTaskDefault`/`t.newSubtaskDefault`, threaded through `addTaskNode`/`addLeafNode`/`makeTaskNode`/`makeLeafNode` as an optional `title` param). **Never translated: user-entered content** — existing task/list titles, notes, dates are exactly what the user typed, in whatever language that is; this app is not a translation tool. `useGoogleAuth.ts` also pulls `useLanguage()` for its own error strings, since it's a hook (not just components) and hooks can call other hooks freely. One gotcha: several `useCallback` dependency arrays initially listed individual `t.xxx` keys, which is unnecessary (fixed to depend on the whole `t` object instead) and tripped `react-hooks/exhaustive-deps` on a member-expression call site (`t.deleteListMessage(...)`) — just depend on `t` itself everywhere, since it's one atomic object swap per language change anyway.
 
 ## Current keyboard shortcuts (canvas focused, a node selected)
 

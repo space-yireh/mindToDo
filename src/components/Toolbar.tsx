@@ -31,6 +31,27 @@ interface ToolbarProps {
   onSelectTaskList: (taskListId: string) => void;
   propertiesOpen: boolean;
   onToggleProperties: () => void;
+  onSignOut: () => void;
+}
+
+export function SignOutIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+      <path
+        d="M8 3.5H4.75a1.25 1.25 0 0 0-1.25 1.25v10.5c0 .69.56 1.25 1.25 1.25H8"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M12.5 13.5 16 10l-3.5-3.5M16 10H8"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }
 
 export function PanelIcon({ side }: { side: "left" | "right" }) {
@@ -167,6 +188,7 @@ export function Toolbar({
   onSelectTaskList,
   propertiesOpen,
   onToggleProperties,
+  onSignOut,
 }: ToolbarProps) {
   const { t } = useLanguage();
   return (
@@ -238,6 +260,15 @@ export function Toolbar({
       <div className="flex shrink-0 items-center gap-1.5">
         <LanguageToggle />
         <ThemeToggle />
+        <button
+          type="button"
+          onClick={onSignOut}
+          aria-label={t.signOutAria}
+          title={t.signOutAria}
+          className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-900 dark:hover:text-slate-300"
+        >
+          <SignOutIcon />
+        </button>
         <button
           type="button"
           onClick={onToggleProperties}

@@ -7,7 +7,7 @@ import { LoginScreen } from "@/components/LoginScreen";
 import { PropertiesPanel } from "@/components/PropertiesPanel";
 import { Sidebar } from "@/components/Sidebar";
 import { SidebarToggle } from "@/components/SidebarToggle";
-import { Toolbar } from "@/components/Toolbar";
+import { SignOutIcon, Toolbar } from "@/components/Toolbar";
 import { useToast } from "@/components/ToastProvider";
 import { useLanguage } from "@/components/LanguageProvider";
 import {
@@ -34,6 +34,7 @@ import {
 } from "@/lib/treeOps";
 import type { MindMap, Selection, TaskList } from "@/lib/types";
 import { useGoogleAuth } from "@/lib/useGoogleAuth";
+import { withAuthRetry } from "@/lib/withAuthRetry";
 
 interface PendingAction {
   title: string;
@@ -177,7 +178,12 @@ export default function Home() {
   const handleApiError = useCallback(
     (err: unknown, fallbackMessage: string) => {
       if (err instanceof GoogleTasksApiError && err.status === 401) {
-        auth.handleUnauthorized();
+        // withAuthRetry already tried a refresh-and-retry before this error
+        // could reach here, and auth.handleUnauthorized (= the hook's
+        // `refresh`) already updated auth state (accessToken/expired) for a
+        // genuine logout — nothing left to do here but tell the user why
+        // the action didn't go through. The accessToken going null is what
+        // actually switches the view back to LoginScreen.
         showToast(t.toastSessionExpired, "error");
         return;
       }
@@ -194,7 +200,7 @@ export default function Home() {
       const message = err instanceof Error ? err.message : fallbackMessage;
       showToast(`${fallbackMessage}: ${message}`, "error");
     },
-    [auth, showToast, t],
+    [showToast, t],
   );
 
   // load task lists once signed in
@@ -205,7 +211,7 @@ export default function Home() {
     const run = async () => {
       setBusy(true);
       try {
-        const items = await listTaskLists(token);
+        const items = await withAuthRetry(token, listTaskLists, auth.handleUnauthorized);
         if (cancelled) return;
         setTaskLists(items.map((i) => ({ id: i.id, title: i.title })));
       } catch (err) {
@@ -238,7 +244,11 @@ export default function Home() {
       setBusy(true);
       setBusyLabel(t.importing);
       try {
-        const imported = await importMindMap(auth.accessToken, taskListId, taskListTitle);
+        const imported = await withAuthRetry(
+          auth.accessToken,
+          (token) => importMindMap(token, taskListId, taskListTitle),
+          auth.handleUnauthorized,
+        );
         setMindMap(imported);
         setOriginalTitle(imported.title);
         setSelectedTaskListId(taskListId);
@@ -255,7 +265,7 @@ export default function Home() {
         setBusyLabel(undefined);
       }
     },
-    [auth.accessToken, busy, handleApiError, showToast, resetHistory, t],
+    [auth.accessToken, auth.handleUnauthorized, busy, handleApiError, showToast, resetHistory, t],
   );
 
   const handleSelectTaskList = useCallback(
@@ -271,7 +281,11 @@ export default function Home() {
     if (!auth.accessToken || busy) return;
     setBusy(true);
     try {
-      const created = await createTaskList(auth.accessToken, t.newList);
+      const created = await withAuthRetry(
+        auth.accessToken,
+        (token) => createTaskList(token, t.newList),
+        auth.handleUnauthorized,
+      );
       setTaskLists((prev) => [...prev, { id: created.id, title: created.title }]);
       setSelectedTaskListId(created.id);
       setMindMap(emptyMindMap(created.id, created.title));
@@ -286,7 +300,7 @@ export default function Home() {
     } finally {
       setBusy(false);
     }
-  }, [auth.accessToken, busy, handleApiError, showToast, resetHistory, t]);
+  }, [auth.accessToken, auth.handleUnauthorized, busy, handleApiError, showToast, resetHistory, t]);
 
   const handleDeleteTaskList = useCallback(
     (taskListId: string) => {
@@ -300,7 +314,11 @@ export default function Home() {
           setPendingAction(null);
           setBusy(true);
           try {
-            await deleteTaskList(auth.accessToken, taskListId);
+            await withAuthRetry(
+              auth.accessToken,
+              (token) => deleteTaskList(token, taskListId),
+              auth.handleUnauthorized,
+            );
             setTaskLists((prev) => prev.filter((tl) => tl.id !== taskListId));
             if (taskListId === selectedTaskListId) {
               setSelectedTaskListId(null);
@@ -317,7 +335,17 @@ export default function Home() {
         },
       });
     },
-    [auth.accessToken, busy, handleApiError, selectedTaskListId, showToast, taskLists, resetHistory, t],
+    [
+      auth.accessToken,
+      auth.handleUnauthorized,
+      busy,
+      handleApiError,
+      selectedTaskListId,
+      showToast,
+      taskLists,
+      resetHistory,
+      t,
+    ],
   );
 
   const handleImportClick = useCallback(() => {
@@ -345,7 +373,11 @@ export default function Home() {
         setBusy(true);
         setBusyLabel(t.exporting);
         try {
-          await exportMindMap(auth.accessToken, mindMap, originalTitle);
+          await withAuthRetry(
+            auth.accessToken,
+            (token) => exportMindMap(token, mindMap, originalTitle),
+            auth.handleUnauthorized,
+          );
           setOriginalTitle(mindMap.title);
           setTaskLists((prev) =>
             prev.map((tl) => (tl.id === mindMap.taskListId ? { ...tl, title: mindMap.title } : tl)),
@@ -359,7 +391,7 @@ export default function Home() {
         }
       },
     });
-  }, [auth.accessToken, busy, handleApiError, mindMap, originalTitle, showToast, t]);
+  }, [auth.accessToken, auth.handleUnauthorized, busy, handleApiError, mindMap, originalTitle, showToast, t]);
 
   // Cmd/Ctrl+S -> export, Cmd/Ctrl+R -> import. Both just open the same
   // confirm modal the toolbar buttons do (never skip it) since both these
@@ -509,15 +541,17 @@ export default function Home() {
     }
   }, [selection, isMobile]);
 
+  // Avoid flashing the login screen for a returning user while the
+  // "do we already have a valid session?" request (POST /api/auth/token
+  // on mount) is still in flight — this resolves in one network round
+  // trip either way, so a brief blank frame beats a login-screen flicker.
+  if (!auth.isReady) {
+    return <div className="flex flex-1 bg-slate-50 dark:bg-slate-950" />;
+  }
+
   if (!auth.accessToken) {
     return (
-      <LoginScreen
-        isReady={auth.isReady}
-        hasClientId={auth.hasClientId}
-        expired={auth.expired}
-        authError={auth.authError}
-        onSignIn={auth.signIn}
-      />
+      <LoginScreen expired={auth.expired} authError={auth.authError} onSignIn={auth.signIn} />
     );
   }
 
@@ -565,6 +599,7 @@ export default function Home() {
             onSelectTaskList={handleSelectTaskList}
             propertiesOpen={propertiesOpen}
             onToggleProperties={() => setPropertiesOpen((v) => !v)}
+            onSignOut={() => void auth.signOut()}
           />
           <div className="flex flex-1 overflow-hidden">
             <MindMapCanvas
@@ -629,7 +664,7 @@ export default function Home() {
               selected), so it must stay reachable on desktop too. Without
               it, collapsing the sidebar and then losing the active list
               (e.g. deleting it) left desktop users with no way back in. */}
-          <div className="flex items-center border-b border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-3 py-3 dark:border-slate-800 dark:bg-slate-950">
             <SidebarToggle
               sidebarOpen={sidebarOpen}
               onToggleSidebar={() => setSidebarOpen((v) => !v)}
@@ -637,6 +672,20 @@ export default function Home() {
               selectedTaskListId={selectedTaskListId}
               onSelectTaskList={handleSelectTaskList}
             />
+            {/* Same reasoning as the toggle above — the Toolbar's own
+                sign-out button doesn't exist in this no-mindMap branch,
+                so without this, a user who hasn't selected a list yet
+                (or just deleted their last one) would have no way to
+                sign out at all. */}
+            <button
+              type="button"
+              onClick={() => void auth.signOut()}
+              aria-label={t.signOutAria}
+              title={t.signOutAria}
+              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 dark:text-slate-500 dark:hover:bg-slate-900 dark:hover:text-slate-300"
+            >
+              <SignOutIcon />
+            </button>
           </div>
           <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-slate-400">
             {taskLists.length === 0 ? t.emptyStateHintNoLists : t.emptyStateHint}

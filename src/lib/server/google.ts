@@ -26,6 +26,17 @@ export class GoogleAuthError extends Error {
   }
 }
 
+/**
+ * True only when retrying can't help for this refresh token. 408/429 are
+ * rate-limit/timeout, and `invalid_client` means a server-side
+ * misconfiguration (bad secret) — none of those should log users out.
+ */
+export function isPermanentAuthFailure(err: unknown): boolean {
+  if (!(err instanceof GoogleAuthError)) return false;
+  if (err.status >= 500 || err.status === 408 || err.status === 429) return false;
+  return err.code !== "invalid_client";
+}
+
 export interface GoogleTokenResponse {
   access_token: string;
   expires_in: number;

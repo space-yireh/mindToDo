@@ -8,6 +8,7 @@ import { useLanguage } from "@/components/LanguageProvider";
 // ~1h), so this still leaves a comfortable margin either way.
 const REFRESH_MARGIN_SECONDS = 300;
 const MIN_REFRESH_DELAY_MS = 5000;
+const TRANSIENT_RETRY_MS = 30_000;
 
 type TokenResult =
   | { accessToken: string; expiresIn: number }
@@ -22,8 +23,11 @@ async function requestAccessToken(): Promise<TokenResult> {
     return { error: "transient" };
   }
   if (res.ok) {
-    const body = (await res.json()) as { accessToken: string; expiresIn: number };
-    return body;
+    try {
+      return (await res.json()) as { accessToken: string; expiresIn: number };
+    } catch {
+      return { error: "transient" };
+    }
   }
   if (res.status === 401) return { error: "login_required" };
   return { error: "transient" };
@@ -45,6 +49,7 @@ export function useGoogleAuth() {
   // one refresh, not one per caller
   const refreshInFlightRef = useRef<Promise<string | null> | null>(null);
   const wasLoggedInRef = useRef(false);
+  const signOutEpochRef = useRef(0);
   // `refresh` and `scheduleRefresh` each need to call the other (refresh
   // schedules the next one; the timer calls refresh again), which can't be
   // expressed as two directly-referencing useCallbacks without a
@@ -65,8 +70,11 @@ export function useGoogleAuth() {
   const refresh = useCallback(async (): Promise<string | null> => {
     if (refreshInFlightRef.current) return refreshInFlightRef.current;
 
+    const epoch = signOutEpochRef.current;
     const promise = (async () => {
       const result = await requestAccessToken();
+      // signOut ran while this request was in flight — don't resurrect the session
+      if (epoch !== signOutEpochRef.current) return null;
       if ("accessToken" in result) {
         setAccessToken(result.accessToken);
         setExpired(false);
@@ -85,7 +93,14 @@ export function useGoogleAuth() {
         return null;
       }
       // transient: leave accessToken/expired/wasLoggedInRef untouched —
-      // this is a retry-later failure, not a logout
+      // this is a retry-later failure, not a logout. Keep trying while a
+      // session exists so the token doesn't silently lapse.
+      if (wasLoggedInRef.current) {
+        if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
+        expiryTimerRef.current = setTimeout(() => {
+          void refreshRef.current();
+        }, TRANSIENT_RETRY_MS);
+      }
       return null;
     })();
 
@@ -160,6 +175,8 @@ export function useGoogleAuth() {
   }, []);
 
   const signOut = useCallback(async () => {
+    signOutEpochRef.current += 1;
+    refreshInFlightRef.current = null;
     if (expiryTimerRef.current) clearTimeout(expiryTimerRef.current);
     setAccessToken(null);
     setExpired(false);

@@ -6,7 +6,7 @@ import {
   getRefreshTokenCookie,
   setRefreshTokenCookie,
 } from "@/lib/server/cookies";
-import { GoogleAuthError, refreshAccessToken } from "@/lib/server/google";
+import { isPermanentAuthFailure, refreshAccessToken } from "@/lib/server/google";
 import { isSameOrigin } from "@/lib/server/csrf";
 
 export const runtime = "nodejs";
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       { headers: NO_STORE },
     );
   } catch (err) {
-    if (err instanceof GoogleAuthError && err.status < 500) {
+    if (isPermanentAuthFailure(err)) {
       // e.g. invalid_grant: the refresh token was revoked or expired —
       // permanent for this cookie, not worth retrying
       await clearRefreshTokenCookie();
